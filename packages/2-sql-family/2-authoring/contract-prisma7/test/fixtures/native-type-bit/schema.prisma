@@ -2,7 +2,8 @@ datasource db {
   provider = "postgresql"
 }
 
-model Rejected {
-  id    Int
-  value String @db.Bit(8)
+model NativeType {
+  id     Int    @id
+  value  String @db.Bit(8)
+  single String @db.Bit
 }

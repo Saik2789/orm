@@ -2,7 +2,8 @@ datasource db {
   provider = "postgresql"
 }
 
-model Rejected {
-  id    Int
-  value String @db.Xml
+model NativeType {
+  id       Int     @id
+  value    String  @db.Xml
+  optional String? @db.Xml
 }
