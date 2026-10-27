@@ -5543,6 +5543,37 @@ importers:
         specifier: 'catalog:'
         version: 5.9.3
 
+  packages/9-public/@prisma/orm-postgres-contrib:
+    dependencies:
+      '@prisma/orm-family-sql':
+        specifier: workspace:8.0.0-rc.20
+        version: link:../orm-family-sql
+      '@prisma/orm-framework':
+        specifier: workspace:8.0.0-rc.20
+        version: link:../orm-framework
+      '@prisma/orm-toolchain':
+        specifier: workspace:8.0.0-rc.20
+        version: link:../orm-toolchain
+    devDependencies:
+      '@internal/extension-citext':
+        specifier: workspace:8.0.0-rc.20
+        version: link:../../../3-extensions/citext
+      '@prisma/orm-target-postgres':
+        specifier: workspace:8.0.0-rc.20
+        version: link:../orm-target-postgres
+      '@repo/tsconfig':
+        specifier: workspace:8.0.0-rc.20
+        version: link:../../../0-config/tsconfig
+      '@repo/tsdown':
+        specifier: workspace:8.0.0-rc.20
+        version: link:../../../0-config/tsdown
+      tsdown:
+        specifier: 'catalog:'
+        version: 0.22.14(tsx@4.23.12)(typescript@5.9.3)
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+
   packages/9-public/@prisma/orm-sqlite:
     dependencies:
       '@prisma/orm-family-sql':
@@ -5902,6 +5933,9 @@ importers:
       '@prisma/orm-postgres':
         specifier: workspace:8.0.0-rc.20
         version: link:../../../packages/9-public/@prisma/orm-postgres
+      '@prisma/orm-postgres-contrib':
+        specifier: workspace:8.0.0-rc.20
+        version: link:../../../packages/9-public/@prisma/orm-postgres-contrib
       '@prisma/orm-sqlite':
         specifier: workspace:8.0.0-rc.20
         version: link:../../../packages/9-public/@prisma/orm-sqlite
