@@ -1,0 +1,44 @@
+[
+  {
+    "id": "citext.install-citext-extension",
+    "label": "Enable extension \"citext\"",
+    "operationClass": "additive",
+    "invariantId": "citext:install-citext-v1",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "dependency",
+        "name": "citext"
+      }
+    },
+    "precheck": [
+      {
+        "description": "verify extension \"citext\" is not already enabled",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_extension\" WHERE \"extname\" = $1) AS \"result\"",
+        "params": ["citext"],
+        "expectation": {
+          "expects": "absent",
+          "object": "extension \"citext\""
+        }
+      }
+    ],
+    "execute": [
+      {
+        "description": "create extension \"citext\"",
+        "sql": "CREATE EXTENSION IF NOT EXISTS citext"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "confirm extension \"citext\" is enabled",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_extension\" WHERE \"extname\" = $1) AS \"result\"",
+        "params": ["citext"],
+        "expectation": {
+          "expects": "present",
+          "object": "extension \"citext\""
+        }
+      }
+    ]
+  }
+]

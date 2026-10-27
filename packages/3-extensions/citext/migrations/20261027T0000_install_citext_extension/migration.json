@@ -1,0 +1,7 @@
+{
+  "from": null,
+  "to": "4d5c833aafef1c0794d85d5554378630b4adc6f718b49d747301ef2c69da8811",
+  "providedInvariants": ["citext:install-citext-v1"],
+  "createdAt": "2026-10-27T00:00:00.000Z",
+  "migrationHash": "727115955cc8f5c721c69be47ff13913d8e009a1129974e02c90e7ab265d876c"
+}
