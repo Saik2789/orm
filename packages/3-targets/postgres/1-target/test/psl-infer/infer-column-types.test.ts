@@ -42,6 +42,9 @@ const COLUMN_TYPES = [
   ['bit(8)', 'Bit(8)'],
   ['bit varying', 'VarBit'],
   ['bit varying(16)', 'VarBit(16)'],
+  ['xml', 'Xml'],
+  ['oid', 'Oid'],
+  ['money', 'Money'],
   ['interval', 'IntervalParts'],
   ['interval(3)', 'IntervalParts(3)'],
 ] as const;
