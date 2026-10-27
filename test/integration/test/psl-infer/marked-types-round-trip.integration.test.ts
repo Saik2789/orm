@@ -80,6 +80,9 @@ const AUTHORED_TYPES = [
   'Bit(8)',
   'VarBit',
   'VarBit(16)',
+  'Xml',
+  'Oid',
+  'Money',
   'IntervalParts',
   'IntervalParts(3)',
 ] as const;
