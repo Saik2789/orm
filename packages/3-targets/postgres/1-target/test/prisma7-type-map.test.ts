@@ -42,6 +42,17 @@ describe('the Prisma 7 type table', () => {
         Oid: { constructorName: 'Oid', args: [] },
         Money: { constructorName: 'Money', args: [] },
       },
+      extensionNativeTypes: {
+        Citext: {
+          constructorName: 'citext.Citext',
+          args: [],
+          pack: {
+            id: 'citext',
+            importName: 'citext',
+            importPath: '@prisma/orm-postgres-contrib/citext/control',
+          },
+        },
+      },
     });
   });
 

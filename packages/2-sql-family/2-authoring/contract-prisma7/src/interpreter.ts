@@ -17,6 +17,7 @@ import {
 import type { CodecLookupWithDescriptors } from '@internal/framework-components/codec';
 import {
   EMPTY_GENERATOR_FUNCTIONS,
+  type ExtensionPackRef,
   type GeneratorFunctionRegistry,
 } from '@internal/framework-components/components';
 import {
@@ -94,7 +95,11 @@ import {
   unmappedFieldInPrimaryKey,
 } from './diagnostics';
 import { type IndexAttribute, indexNode, parseIndexAttribute } from './indexes';
-import { prisma7NativeTypeMapping, prisma7ScalarMapping } from './native-types';
+import {
+  type Prisma7ExtensionPack,
+  prisma7NativeTypeMapping,
+  prisma7ScalarMapping,
+} from './native-types';
 import {
   lowerRelations,
   parseRelationAttribute,
@@ -611,6 +616,7 @@ export function interpretPrisma7Documents(
         target: binding.target,
         warnings: undefined,
         createNamespace,
+        ...ifDefined('extensions', composedExtensionPackRefs(input)),
         ...(namespaceEntities.size > 0 ? { namespaces: [...namespaceEntities.keys()] } : {}),
         models: modelNodes,
         ...(tables.length > 0 ? { tables } : {}),
@@ -618,6 +624,19 @@ export function interpretPrisma7Documents(
       input.codecLookup,
       input.dataTypes.lookup,
     ),
+  );
+}
+
+/** Each composed extension pack, which the contract requires at runtime, as the Prisma 8 schema reader records them. */
+function composedExtensionPackRefs(
+  input: InterpretPrisma7DocumentsInput,
+): Record<string, ExtensionPackRef<'sql', string>> | undefined {
+  if (input.composedExtensions.length === 0) return undefined;
+  const { familyId, targetId } = input.binding.target;
+  return Object.fromEntries(
+    [...input.composedExtensions]
+      .sort()
+      .map((id) => [id, { kind: 'extension', id, familyId, targetId, version: '0.0.1' }]),
   );
 }
 
@@ -1041,6 +1060,14 @@ function nativeTypeMessage(label: string, nativeType: string): string {
   return `${label}: native type "@db.${nativeType}" has no Prisma 8 codec yet, and Prisma 8 cannot read this schema until it supports the column type. @ignore on the field or @@ignore on the model does not help: Prisma 8 keeps the columns of ignored fields and models in the contract. Changing the field's type to one Prisma 8 supports changes the column type on Prisma 7's next migration.`;
 }
 
+function extensionPackMissingMessage(
+  label: string,
+  nativeType: string,
+  pack: Prisma7ExtensionPack,
+): string {
+  return `${label}: native type "@db.${nativeType}" is a column type of the "${pack.id}" extension pack, which the config does not compose. Add it to extensions in prisma.config.ts: import ${pack.importName} from '${pack.importPath}', then extensions: [${pack.importName}].`;
+}
+
 interface ReadFieldArgs {
   readonly field: FieldSymbol;
   readonly build: ModelBuild;
@@ -1270,8 +1297,19 @@ function readField(args: ReadFieldArgs): void {
     const native =
       nativeType === undefined
         ? undefined
-        : prisma7NativeTypeMapping(binding.typeMap, nativeType.name);
-    if (nativeType !== undefined && native === undefined) {
+        : prisma7NativeTypeMapping(binding.typeMap, nativeType.name, args.composedExtensions);
+    if (nativeType !== undefined && native?.kind === 'packNotComposed') {
+      diagnostics.push(
+        prisma7Diagnostic(
+          'PSL.PRISMA7_EXTENSION_PACK_MISSING',
+          extensionPackMissingMessage(label, nativeType.name, native.pack),
+          sourceId,
+          nativeType.attribute.span,
+        ),
+      );
+      return;
+    }
+    if (nativeType !== undefined && native?.kind === 'unknown') {
       diagnostics.push(
         prisma7Diagnostic(
           'PSL.PRISMA7_NATIVE_TYPE_UNSUPPORTED',
@@ -1282,14 +1320,14 @@ function readField(args: ReadFieldArgs): void {
       );
       return;
     }
-    const mapping = native ?? scalar;
+    const mapping = native?.kind === 'mapped' ? native.mapping : scalar;
     fieldType =
       nativeType === undefined || nativeType.attribute.args.length === 0
-        ? { kind: 'values', path: [mapping.constructorName], values: mapping.args }
+        ? { kind: 'values', path: mapping.constructorName.split('.'), values: mapping.args }
         : {
             kind: 'written',
             call: {
-              path: [mapping.constructorName],
+              path: mapping.constructorName.split('.'),
               args: nativeType.attribute.args,
               span: nativeType.attribute.span,
             },

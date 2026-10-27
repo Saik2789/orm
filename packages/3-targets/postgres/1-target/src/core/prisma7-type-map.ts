@@ -127,8 +127,24 @@ function mappingsOf(
   return Object.fromEntries(Object.entries(types).map(([name, type]) => [name, mappingOf(type)]));
 }
 
+/**
+ * The `@db.*` types of a PostgreSQL extension, which an extension pack provides. The target names the pack and its constructor and does not depend on it; the reader uses the constructor only when the config composes the pack.
+ */
+const prisma7PostgresExtensionNativeTypes = {
+  Citext: {
+    constructorName: 'citext.Citext',
+    args: [],
+    pack: {
+      id: 'citext',
+      importName: 'citext',
+      importPath: '@prisma/orm-postgres-contrib/citext/control',
+    },
+  },
+} as const;
+
 /** {@link prisma7PostgresTypes} as the Prisma 7 reader takes it: each type's constructor call. */
 export const prisma7PostgresTypeMap = {
   scalars: mappingsOf(prisma7PostgresTypes.scalars),
   nativeTypes: mappingsOf(prisma7PostgresTypes.nativeTypes),
+  extensionNativeTypes: prisma7PostgresExtensionNativeTypes,
 };
