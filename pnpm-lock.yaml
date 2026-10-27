@@ -6030,6 +6030,9 @@ importers:
       '@internal/extension-arktype-json':
         specifier: workspace:8.0.0-rc.20
         version: link:../../packages/3-extensions/arktype-json
+      '@internal/extension-citext':
+        specifier: workspace:8.0.0-rc.20
+        version: link:../../packages/3-extensions/citext
       '@internal/extension-paradedb':
         specifier: workspace:8.0.0-rc.20
         version: link:../../packages/3-extensions/paradedb
