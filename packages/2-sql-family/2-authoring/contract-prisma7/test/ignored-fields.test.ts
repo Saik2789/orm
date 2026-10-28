@@ -84,7 +84,7 @@ describe('an @ignore relation field', () => {
   });
 });
 
-describe('an @ignore field whose type needs an extension pack the config does not compose', () => {
+describe('an @ignore field whose type needs an extension pack that is not available', () => {
   it('is refused, because the contract keeps its column', async () => {
     const result = await loadFixtureSchema('ignored-field-no-codec');
     expect(

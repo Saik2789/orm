@@ -1055,7 +1055,7 @@ function extensionPackMissingMessage(
   nativeType: string,
   pack: Prisma7ExtensionPack,
 ): string {
-  return `${label}: native type "@db.${nativeType}" is a column type of the "${pack.id}" extension pack, which the config does not compose. Add it to extensions in prisma.config.ts: import ${pack.importName} from '${pack.importPath}', then extensions: [${pack.importName}].`;
+  return `${label}: native type "@db.${nativeType}" is a column type of the "${pack.id}" extension pack, which is not available. Add the pack to extensions in prisma.config.ts: import ${pack.importName} from '${pack.importPath}', then extensions: [${pack.importName}].`;
 }
 
 interface ReadFieldArgs {

@@ -74,12 +74,12 @@ describe('a native type an extension pack provides', () => {
       {
         code: 'PSL.PRISMA7_EXTENSION_PACK_MISSING',
         message:
-          'Field "Account.name": native type "@db.Shout" is a column type of the "shout" extension pack, which the config does not compose. Add it to extensions in prisma.config.ts: import shout from \'@example/shout/control\', then extensions: [shout].',
+          'Field "Account.name": native type "@db.Shout" is a column type of the "shout" extension pack, which is not available. Add the pack to extensions in prisma.config.ts: import shout from \'@example/shout/control\', then extensions: [shout].',
       },
       {
         code: 'PSL.PRISMA7_EXTENSION_PACK_MISSING',
         message:
-          'Field "Account.names": native type "@db.Shout" is a column type of the "shout" extension pack, which the config does not compose. Add it to extensions in prisma.config.ts: import shout from \'@example/shout/control\', then extensions: [shout].',
+          'Field "Account.names": native type "@db.Shout" is a column type of the "shout" extension pack, which is not available. Add the pack to extensions in prisma.config.ts: import shout from \'@example/shout/control\', then extensions: [shout].',
       },
     ]);
   });
