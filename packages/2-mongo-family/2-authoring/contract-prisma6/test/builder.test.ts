@@ -34,24 +34,21 @@ describe('the Prisma 6 reader on the contract builder', () => {
         { kind: 'mongo-index', keys: [{ field: 'email', direction: 1 }], unique: true },
       ],
     ],
-  ])(
-    'keeps one index for %s, as the database holds one',
-    async (_, caseName, collection, indexes) => {
-      const result = await loadPrisma6Schema(join(casesDir, caseName, 'schema.prisma'));
-      if (!result.ok) throw new Error(JSON.stringify(result.failure.diagnostics));
-      const serialized = serializeMongoContract(result.value) as {
-        storage: {
-          namespaces: {
-            __unbound__: { entries: { collection: Record<string, { indexes?: unknown }> } };
-          };
+  ])('merges the covered index for %s', async (_, caseName, collection, indexes) => {
+    const result = await loadPrisma6Schema(join(casesDir, caseName, 'schema.prisma'));
+    if (!result.ok) throw new Error(JSON.stringify(result.failure.diagnostics));
+    const serialized = serializeMongoContract(result.value) as {
+      storage: {
+        namespaces: {
+          __unbound__: { entries: { collection: Record<string, { indexes?: unknown }> } };
         };
       };
+    };
 
-      expect(
-        serialized.storage.namespaces.__unbound__.entries.collection[collection]?.indexes,
-      ).toEqual(indexes);
-    },
-  );
+    expect(
+      serialized.storage.namespaces.__unbound__.entries.collection[collection]?.indexes,
+    ).toEqual(indexes);
+  });
 
   it('reports a builder refusal where the schema writes its subject', async () => {
     const result = await loadPrisma6Schema(join(casesDir, 'generated-conflict', 'schema.prisma'));

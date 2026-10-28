@@ -75,6 +75,25 @@ describe('the builder merges an index another index in its collection covers', (
     ).toEqual([{ kind: 'mongo-index', keys: ab, unique: true }]);
   });
 
+  it("drops a later model's plain index that an earlier model's unique index covers", () => {
+    expect(
+      indexesOf([
+        inUsers('User', [{ fields: { a: 1 }, options: { unique: true } }]),
+        inUsers('Admin', [{ fields: { a: 1 } }, { fields: { b: 1 } }]),
+      ]),
+    ).toEqual([
+      { kind: 'mongo-index', keys: a, unique: true },
+      { kind: 'mongo-index', keys: [{ field: 'b', direction: 1 }] },
+    ]);
+  });
+
+  it('keeps two indexes on the same field in opposite directions', () => {
+    expect(indexesOf([inUsers('User', [{ fields: { a: 1 } }, { fields: { a: -1 } }])])).toEqual([
+      { kind: 'mongo-index', keys: a },
+      { kind: 'mongo-index', keys: [{ field: 'a', direction: -1 }] },
+    ]);
+  });
+
   it('keeps two indexes on the same fields in another order', () => {
     expect(
       indexesOf([inUsers('User', [{ fields: { a: 1, b: 1 } }, { fields: { b: 1, a: 1 } }])]),
