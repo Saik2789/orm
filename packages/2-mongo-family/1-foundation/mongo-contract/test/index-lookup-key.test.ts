@@ -3,25 +3,23 @@ import {
   indexLookupKey,
   MONGO_INDEX_OPTION_KEYS,
   type MongoIndexOptionKey,
-} from '../src/index-equivalence';
-import { MongoSchemaIndex, type MongoSchemaIndexOptions } from '../src/schema-index';
+} from '../src/index-lookup-key';
+import { MongoIndex, type MongoIndexInput } from '../src/ir/mongo-index';
 
 const keys = [{ field: 'email', direction: 1 as const }];
 
 describe('MONGO_INDEX_OPTION_KEYS', () => {
   it('lists every index option', () => {
-    expectTypeOf<MongoIndexOptionKey>().toEqualTypeOf<
-      Exclude<keyof MongoSchemaIndexOptions, 'keys'>
-    >();
+    expectTypeOf<MongoIndexOptionKey>().toEqualTypeOf<Exclude<keyof MongoIndexInput, 'keys'>>();
     expect(MONGO_INDEX_OPTION_KEYS).toHaveLength(9);
   });
 });
 
 describe('indexLookupKey', () => {
-  it('tells apart indexes that differ in any option, and ignores options set to false', () => {
-    const lookupKey = (options: Omit<MongoSchemaIndexOptions, 'keys'>) =>
-      indexLookupKey(new MongoSchemaIndex({ keys, ...options }));
+  const lookupKey = (options: Omit<MongoIndexInput, 'keys'>) =>
+    indexLookupKey(new MongoIndex({ keys, ...options }));
 
+  it('tells apart indexes that differ in any option, and ignores options set to false', () => {
     expect({
       plain: lookupKey({}),
       notSparse: lookupKey({ sparse: false }),
@@ -43,5 +41,21 @@ describe('indexLookupKey', () => {
         ].map(lookupKey),
       ).size,
     }).toEqual({ plain: 'email:1', notSparse: 'email:1', reordered: true, distinct: 10 });
+  });
+
+  it('gives unique set to false, sparse set to false and no options the same key, and a set option another', () => {
+    expect({
+      notUnique: lookupKey({ unique: false }),
+      notSparse: lookupKey({ sparse: false }),
+      unset: lookupKey({}),
+      sparse: lookupKey({ sparse: true }),
+      collation: lookupKey({ collation: { locale: 'fr' } }),
+    }).toEqual({
+      notUnique: 'email:1',
+      notSparse: 'email:1',
+      unset: 'email:1',
+      sparse: 'email:1|sparse:true',
+      collation: 'email:1|collation:{"locale":"fr"}',
+    });
   });
 });

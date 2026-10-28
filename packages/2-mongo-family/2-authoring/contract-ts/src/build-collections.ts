@@ -1,5 +1,6 @@
 import {
   applyPolymorphicScopeToMongoIndex,
+  indexLookupKey,
   type MongoCollectionInput,
   MongoCollectionOptions,
   type MongoCollectionOptionsAuthoringInput,
@@ -13,31 +14,6 @@ import { ifDefined } from '@internal/utils/defined';
 import { storedFieldNameIn } from './build-models';
 import type { BuildRefusal, IndexKey, IndexShapeRule } from './build-refusals';
 import type { FieldNode, IndexNode, ModelNode } from './contract-definition';
-
-/** `canonicalStringify` refuses class instances such as `MongoIndex`, so this reads their enumerable properties instead. */
-function stableStringify(value: unknown): string {
-  if (Array.isArray(value)) {
-    return `[${value.map(stableStringify).join(',')}]`;
-  }
-
-  if (value && typeof value === 'object') {
-    return `{${Object.entries(value)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([key, entry]) => `${JSON.stringify(key)}:${stableStringify(entry)}`)
-      .join(',')}}`;
-  }
-
-  return JSON.stringify(value);
-}
-
-/** Two indexes with the same coverage key differ at most in `unique`. An option set to `false` counts as unset, as the migration planner counts it. */
-function coverageKey(index: MongoIndex): string {
-  return stableStringify(
-    Object.fromEntries(
-      Object.entries(index).filter(([option, value]) => option !== 'unique' && value !== false),
-    ),
-  );
-}
 
 function storedIndexKey(fields: readonly FieldNode[], key: string): string {
   const wildcardMatch = key.match(/^(.+)\.\$\*\*$/);
@@ -228,8 +204,10 @@ export function buildCollections(input: {
         refusals.push({ kind: 'indexScopeConflict', key, reason: scoped.reason, signature });
         return;
       }
-      const coverage = coverageKey(scoped.index);
-      const coveredAt = collectionIndexes.findIndex((held) => coverageKey(held) === coverage);
+      const lookupKey = indexLookupKey({ ...scoped.index, unique: undefined });
+      const coveredAt = collectionIndexes.findIndex(
+        (held) => indexLookupKey({ ...held, unique: undefined }) === lookupKey,
+      );
       const held = collectionIndexes[coveredAt];
       if (held !== undefined) {
         if (held.unique === true || scoped.index.unique !== true) return;
