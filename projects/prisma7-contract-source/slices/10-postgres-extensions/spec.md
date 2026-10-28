@@ -31,7 +31,7 @@ This slice makes a Postgres extension something a contract declares, so checking
 1. **`db sign` has one rule.** It checks the database against each contract space's contract. If every space holds, it writes the markers. It never runs a migration operation.
 2. **`db sign` refuses a space whose head ref requires an invariant its marker does not already record.** An invariant is a promise that a migration ran, and only running that migration keeps it. The refusal names the space and each missing invariant, and says to run `db migrate`. An extension that wants databases to be adoptable by `db sign` describes what it needs in its contract instead of in an invariant.
 3. **A Postgres extension is an object kind of the Postgres target, named `extension`.** It follows the `native_enum` kind, whose whole lifecycle the planner and verifier manage. It does not follow `role`, which the planner never creates.
-4. **An extension lives in the unbound namespace, as a role does**, because an extension's name is unique across the whole database. It has an optional `schema`: the schema its objects are created in (`CREATE EXTENSION … WITH SCHEMA`). Supabase, for example, installs extensions into a schema named `extensions`.
+4. **An extension is declared in the namespace of the schema its objects are created in**, as a table is. PostgreSQL records that schema for each extension (`pg_extension.extnamespace`; `CREATE EXTENSION … WITH SCHEMA`). Declared at the top level, it is in the default namespace, `public`. Supabase, for example, installs extensions into a schema named `extensions`, so its contract declares them in `namespace extensions`. An extension's name is unique across the whole database, so a contract that declares the same extension in two namespaces is refused.
 5. **The extension's version is not recorded.** Hosts offer different versions, and no pack pins one today.
 6. **Who declares an extension:** a pack declares the extension it needs in its own contract. An extension no pack covers, such as `pg_trgm`, goes in the application's contract. Two spaces declaring the same extension is the existing storage-element conflict (`PN-MIG-CHECK-014 STORAGE_ELEMENT_CONFLICT`).
 7. **Extensions in the database that no contract declares are never reported**, in strict mode or not. PostgreSQL always has `plpgsql`, and hosts preinstall many more.
@@ -44,30 +44,29 @@ This slice makes a Postgres extension something a contract declares, so checking
 
 Copy the `native_enum` kind's path through the code; the paths below are under `packages/3-targets/postgres/`.
 
-- **Object class and validation:** a frozen `PostgresExtension` class with `name`, optional `schema` and optional `control`, plus its validator schema and entity-kind descriptor. Register it with the Postgres contract serializer beside `role` and `native_enum`. Contract JSON: `storage.namespaces.__unbound__.entries.extension.<name>`.
-- **PSL:** an `extension` block, valid only in the unbound namespace, like `role`:
+- **Object class and validation:** a frozen `PostgresExtension` class with `name` and optional `control`, plus its validator schema and entity-kind descriptor. Register it with the Postgres contract serializer beside `role` and `native_enum`. Contract JSON: `storage.namespaces.<namespace>.entries.extension.<name>`.
+- **PSL:** an `extension` block, at the top level or in a `namespace` block:
 
   ```prisma
-  namespace unbound {
-    extension pg_trgm {}
-    extension postgis {
-      schema = "extensions"
-    }
+  extension pg_trgm {}
+
+  namespace extensions {
+    extension postgis {}
   }
   ```
 
-- **TypeScript builder:** `extension(name, { schema? })` in the Postgres contract builder, lowered like `role(name)`.
-- **Reading the database:** the Postgres control adapter reads `pg_extension` joined to `pg_namespace` (extension name and its schema) into a new schema node kind on the database root, beside roles.
+- **TypeScript builder:** `extension(name)` in the Postgres contract builder, placed in a namespace the way the builder places a native enum.
+- **Reading the database:** the Postgres control adapter reads `pg_extension` joined to `pg_namespace` into a new schema node kind on the namespace node of the extension's schema, as it reads native enums.
 - **Verification:**
   - A declared extension that is missing fails, in both modes.
-  - A declared `schema` that differs from the live one fails as an incompatible declaration.
+  - An extension declared in one namespace and installed in another fails as an incompatible declaration.
   - Extras are never reported (decision 7).
   - The node's granularity is `entity`, mapped in `POSTGRES_NODE_ENTITY_KIND`, so a sibling contract space never sees another space's extension as an extra.
   - `control: external` means verify only.
 - **Planning:**
-  - A missing extension plans `CreateExtensionCall`, adding `WITH SCHEMA` when a schema is declared. Give the operation the precheck and postcheck `installExtension` has, using `extensionExistsAst`.
+  - A missing extension plans `CreateExtensionCall` with `WITH SCHEMA` naming its namespace's schema. Give the operation the precheck and postcheck `installExtension` has, using `extensionExistsAst`.
   - A removed extension plans `DROP EXTENSION` without `CASCADE`, classed destructive.
-  - A changed `schema` plans `ALTER EXTENSION … SET SCHEMA`.
+  - An extension moved to another namespace plans `ALTER EXTENSION … SET SCHEMA`.
   - Extension operations run before any type, table or index operation, in the existing `dep` bucket.
 - **`contract infer` and `contract print`** write extension blocks, and the printer round-trips them. `contract infer` writes every extension except `plpgsql`.
 
@@ -88,7 +87,7 @@ For pgvector, PostGIS, ParadeDB and citext:
 - **Extension with a composed pack:** each listed extension that a composed pack declares adds nothing to the application's contract.
 - **Extension with an uncomposed pack:** a listed extension with a pack that is not composed is refused with `PSL.PRISMA7_EXTENSION_PACK_MISSING`, which already exists for citext. It names the import to add to `extensions` in `prisma.config.ts`. Extend the target's extension map to pgvector (`vector`), PostGIS and ParadeDB (`pg_search`).
 - **Extension with no pack:** every other listed extension becomes an `extension` entry in the application's contract.
-- **Arguments:** the `schema:` argument maps to `schema`. A `version:` or `map:` argument is refused with a diagnostic naming the edit, since the contract would not describe it exactly.
+- **Arguments:** the `schema:` argument puts the extension in that schema's namespace. A `version:` or `map:` argument is refused with a diagnostic naming the edit, since the contract would not describe it exactly.
 
 ### `contract emit` writes the pinned extension files
 
@@ -100,7 +99,7 @@ Implement decision 2 in `packages/1-framework/3-tooling/cli/src/control-api/oper
 
 ## Tests
 
-- Unit tests for the class, validator, serializer, PSL block (including the refusal outside the unbound namespace), TS builder, reading the database, verifier dispositions (missing, wrong schema, extras ignored, a sibling space's extension ignored) and each planner case.
+- Unit tests for the class, validator, serializer, PSL block (including the refusal of one extension in two namespaces), TS builder, reading the database, verifier dispositions (missing, installed in another schema, extras ignored, a sibling space's extension ignored) and each planner case.
 - An integration test per pack: a database that has the extension but no marker signs cleanly, and `db verify --strict` passes. A database on the pack's old head moves to the new head with `db migrate`.
 - The Prisma 7 reader fixtures: `extensions` with a pack, without a pack, with `schema:`, and refused with `version:`.
 - A CLI journey for the Outcome example: `contract emit`, `db sign`, `db verify --strict`, then `db migrate` of a later application change, and a fresh database built from `migrations/` alone that has both extensions.
