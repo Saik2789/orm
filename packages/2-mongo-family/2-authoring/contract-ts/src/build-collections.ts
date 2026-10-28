@@ -205,13 +205,13 @@ export function buildCollections(input: {
         return;
       }
       const lookupKey = indexLookupKey({ ...scoped.index, unique: undefined });
-      const coveredAt = collectionIndexes.findIndex(
+      const matchingAt = collectionIndexes.findIndex(
         (held) => indexLookupKey({ ...held, unique: undefined }) === lookupKey,
       );
-      const held = collectionIndexes[coveredAt];
+      const held = collectionIndexes[matchingAt];
       if (held !== undefined) {
         if (held.unique === true || scoped.index.unique !== true) return;
-        collectionIndexes.splice(coveredAt, 1);
+        collectionIndexes.splice(matchingAt, 1);
       } else if (isTextIndex(written)) {
         if (textIndexCollections.has(collection)) {
           refusals.push({ kind: 'indexShape', key, rule: 'second-text-index', signature });

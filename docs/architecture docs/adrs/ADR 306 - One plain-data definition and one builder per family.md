@@ -62,7 +62,7 @@ The builder checks the assembled contract last. Those refusals (kind `validator`
 - One rule, one implementation. A rule added to the builder applies to every source.
 - A source can report every refusal at once, at its own position, because refusals are data, not thrown errors.
 - Sources cannot differ in what they accept. A parity suite writes each case in TypeScript and in PSL and checks that the two emitted `contract.json` files are byte-identical.
-- Index order is the source's own. The builder does not reorder indexes, because the storage hash depends on their order. When one index covers another in the same collection, the builder removes the covered one and keeps the survivor where it was written.
+- Index order is the source's own. The builder does not reorder indexes, because the storage hash depends on their order. When two indexes in one collection are identical, or one is a non-unique index made redundant by a unique index on the same keys and otherwise identical options, the builder removes one and keeps the survivor where it was written.
 
 SQL does not follow this ADR fully yet. Its builder throws its first refusal, so SQL PSL places only the errors it catches and matches (TML-3730). SQL PSL also adds polymorphism to the contract after the builder runs, instead of carrying it in the definition (TML-2228).
 

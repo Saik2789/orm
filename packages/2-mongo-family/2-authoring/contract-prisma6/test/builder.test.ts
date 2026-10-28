@@ -34,7 +34,7 @@ describe('the Prisma 6 reader on the contract builder', () => {
         { kind: 'mongo-index', keys: [{ field: 'email', direction: 1 }], unique: true },
       ],
     ],
-  ])('merges the covered index for %s', async (_, caseName, collection, indexes) => {
+  ])('merges an identical or redundant index for %s', async (_, caseName, collection, indexes) => {
     const result = await loadPrisma6Schema(join(casesDir, caseName, 'schema.prisma'));
     if (!result.ok) throw new Error(JSON.stringify(result.failure.diagnostics));
     const serialized = serializeMongoContract(result.value) as {

@@ -27,7 +27,7 @@ const ab = [
   { field: 'b', direction: 1 },
 ];
 
-describe('PSL indexes another index in the collection covers', () => {
+describe('PSL indexes identical to, or redundant beside, another index in the collection', () => {
   it('becomes one unique index for @unique and @@index on one field', () => {
     expect(
       indexesOf(`model User {

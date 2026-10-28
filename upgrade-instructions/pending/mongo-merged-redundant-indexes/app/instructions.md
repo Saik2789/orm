@@ -1,8 +1,8 @@
 ---
 changes:
-  - id: mongo-merged-covered-indexes
+  - id: mongo-merged-redundant-indexes
     summary: |
-      Every MongoDB contract source now merges an index that another index in the same collection covers. Identical indexes, which TypeScript and PSL refused before (`CONTRACT.NAME_DUPLICATE`, `PSL_INVALID_INDEX`), become one index. A unique and a plain index on the same keys, such as `@unique` and `@@index` on one field, become one unique index; before, the contract held both and the migration that created them failed. No source change is needed. Run `prisma contract emit`; a contract that held such a pair gets a new storage hash. Delete a migration planned earlier that creates both indexes, and plan it again.
+      Every MongoDB contract source now merges identical and redundant indexes in a collection. Identical indexes, which TypeScript and PSL refused before (`CONTRACT.NAME_DUPLICATE`, `PSL_INVALID_INDEX`), become one index. A unique and a plain index on the same keys, such as `@unique` and `@@index` on one field, become one unique index; before, the contract held both and the migration that created them failed. No source change is needed. Run `prisma contract emit`; a contract that held such a pair gets a new storage hash. Delete a migration planned earlier that creates both indexes, and plan it again.
     detection:
       glob: "**/*.{ts,mts,cts,tsx,prisma}"
       matches:
@@ -13,9 +13,9 @@ changes:
         - '@prisma/orm-(?:mongo|family-mongo/contract-ts)/contract-builder[\x27"][\s\S]*\bindex\(\s*(\{[^}]*\})\s*\)[\s\S]*\bindex\(\s*\1\s*,\s*\{\s*unique\s*:\s*true\s*\}\s*\)'
 ---
 
-# MongoDB indexes another index covers are merged
+# MongoDB merges identical and redundant indexes
 
-An index covers another in the same collection when both have the same keys and the same options, counting an option set to `false` as unset; a unique index also covers a plain one. The contract keeps the unique index, or the first of two identical ones, where it was written:
+Two indexes in one collection are identical when they have the same keys and the same options, counting an option set to `false` as unset. A plain index is redundant beside a unique index that is otherwise identical. The contract keeps the unique index, or the first of two identical ones, where it was written:
 
 ```prisma
 model User {
@@ -28,7 +28,7 @@ model User {
 
 This now gives one unique index on `{ email: 1 }`. Indexes on the same keys with a different collation, partial filter or other option stay separate.
 
-## `mongo-merged-covered-indexes`
+## `mongo-merged-redundant-indexes`
 
 The detection matches a MongoDB schema or `defineContract` file that writes a unique and a plain index on the same keys. Identical indexes are not matched: the contract builder refused them before, so no working project has them.
 

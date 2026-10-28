@@ -48,7 +48,7 @@ const ab = [
   { field: 'b', direction: 1 },
 ];
 
-describe('the builder merges an index another index in its collection covers', () => {
+describe('the builder merges identical and redundant indexes in a collection', () => {
   it.each<[string, readonly IndexNode[]]>([
     [
       'the unique index first',
@@ -75,7 +75,7 @@ describe('the builder merges an index another index in its collection covers', (
     ).toEqual([{ kind: 'mongo-index', keys: ab, unique: true }]);
   });
 
-  it("drops a later model's plain index that an earlier model's unique index covers", () => {
+  it("drops a later model's plain index that an earlier model's unique index makes redundant", () => {
     expect(
       indexesOf([
         inUsers('User', [{ fields: { a: 1 }, options: { unique: true } }]),

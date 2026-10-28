@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { detectionPatterns } from '../guide-detections';
 
-const APP_GUIDE = 'upgrade-instructions/pending/mongo-merged-covered-indexes/app/instructions.md';
+const APP_GUIDE = 'upgrade-instructions/pending/mongo-merged-redundant-indexes/app/instructions.md';
 
 const matches = (content: string) =>
-  detectionPatterns(APP_GUIDE, 'mongo-merged-covered-indexes').some((pattern) =>
+  detectionPatterns(APP_GUIDE, 'mongo-merged-redundant-indexes').some((pattern) =>
     pattern.test(content),
   );
 
@@ -17,7 +17,7 @@ ${body}
 }
 `;
 
-describe('the app mongo-merged-covered-indexes detection', () => {
+describe('the app mongo-merged-redundant-indexes detection', () => {
   it('matches a PSL MongoDB model with a unique and a plain index on the same keys', () => {
     expect([
       matches(mongoModel('  email String @unique\n\n  @@index([email])')),
