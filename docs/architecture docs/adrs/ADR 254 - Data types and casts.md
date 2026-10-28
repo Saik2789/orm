@@ -1,6 +1,6 @@
 # ADR 254 — Data types and casts
 
-Status: **Accepted.** Implemented for the Postgres, SQLite and MongoDB targets and their extensions. Amended 2026-10-20: a type-constructor argument that is a value names a data type and is admitted by the cast rule (see "Columns and type constructors"). Amended 2026-10-22: MongoDB values are written and cast as SQL values are, and enum members and discriminator values are read by one framework function in both families (see "Enum members and discriminator values"). Amended 2026-10-27: the Postgres target sets `lc_monetary=C` so `money` reads exactly (see "Date and time types").
+Status: **Accepted.** Implemented for the Postgres, SQLite and MongoDB targets and their extensions. Amended 2026-10-20: a type-constructor argument that is a value names a data type and is admitted by the cast rule (see "Columns and type constructors"). Amended 2026-10-22: MongoDB values are written and cast as SQL values are, and enum members and discriminator values are read by one framework function in both families (see "Enum members and discriminator values"). Amended 2026-10-27: the Postgres target sets `lc_monetary=C` so `money` reads exactly (see "Money").
 
 ## At a glance
 
@@ -356,6 +356,8 @@ A text codec's application value is the stored form of its data type, the same o
 
 PostgreSQL prints dates and timestamps in the session's `DateStyle`, and only `ISO` prints text these codecs read. The PostgreSQL target declares `DateStyle=ISO` as a session setting on its descriptor (`sessionSettings`), and the stack passes it to every driver it creates. The PostgreSQL driver ensures it on every connection it uses; how is the driver's own detail. It starts each connection it opens with `options=-c DateStyle=ISO`, after any options the URL or `PGOPTIONS` gives; a startup option sets the session's default, so a `RESET ALL`, which the Supabase client runs when it releases a role scope, keeps it. On a `pg.Pool` or `pg.Client` the application supplies, it sets `DateStyle=ISO` with a statement on each connection before first use, and again after a connection held for exclusive use is released, since its holder may have reset the session. Every date and time codec that reads a date or timestamp, the text, `Temporal` and `Date` codecs alike, refuses one printed in another style with `RUNTIME.DATE_STYLE_NOT_ISO`, which says the driver could not ensure the setting, rather than read it wrong. `time` and `timetz` print the same text in every style. No `TimeZone` setting is needed.
 
+## Money
+
 `money` is printed in the session's `lc_monetary` locale, whose currency symbol, separators and sign vary. The target declares `lc_monetary=C` beside `DateStyle=ISO`, and the driver ensures both the same way, so PostgreSQL prints `$1,234.56` and `-$1,234.56`. `pg/money` stores digit text with two fraction digits, `"-1234.56"`, and `pg/money@1` reads the `C` form into it exactly and refuses any other form with `RUNTIME.LC_MONETARY_NOT_C`. The setting also changes how `money` prints in an application's own raw SQL.
 
 ## Assembly
@@ -435,6 +437,7 @@ model Place {
 - **Enum member names in a default as string values.** A member name is a reference to a declaration, resolved in scope like a field name.
 - **A vector type casting from the JSON type.** It matches on storage shape; a vector is several numbers.
 - **A role name for the argument of a constructor every SQL target contributes**, such as `sql.String`'s length declared `dataType: 'wholeNumber'` and resolved by each target at assembly. It is a small vocabulary of family types, which this ADR rejects above. The family builds the constructor with the target's size type instead (`sqlTargetTypeConstructors({ sizeType })`).
+- **Reading `money` through a `::numeric` cast in every query instead of setting `lc_monetary`.** A numeric cast prints the same text in every locale, but each read of a `money` column would need it: in a plain select, in a returned row and in a nested relation's JSON. No codec can add SQL to a read today, so every codec descriptor would gain a hook for one type.
 - **A SQLite data type that holds a whole number as a JavaScript number, for type-constructor sizes.** No SQLite column has such a type. `sqlite/real` already holds every size exactly, and a written whole number casts to it.
 
 ## Not decided here
