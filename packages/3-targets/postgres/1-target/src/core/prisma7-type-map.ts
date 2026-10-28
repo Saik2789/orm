@@ -34,9 +34,9 @@ import {
 import { postgresCodecDescriptorRegistry } from './registry';
 import { postgresScalarAndNativeTypeConstructors } from './type-constructors';
 
-/** A Prisma 8 constructor call: its name and the values of its arguments. */
+/** A Prisma 8 constructor call: its path and the values of its arguments. */
 export interface ConstructorCall {
-  readonly constructorName: string;
+  readonly constructorPath: readonly string[];
   readonly args: readonly unknown[];
 }
 
@@ -118,7 +118,7 @@ function mappingOf({ dataType, params }: Prisma7ColumnType): ConstructorCall {
       `No constructor marked inferred writes ${dataType} with these parameters.`,
     );
   }
-  return { constructorName: markedConstructor.path.join('.'), args };
+  return { constructorPath: markedConstructor.path, args };
 }
 
 function mappingsOf(
@@ -132,7 +132,7 @@ function mappingsOf(
  */
 const prisma7PostgresExtensionNativeTypes = {
   Citext: {
-    constructorName: 'citext.Citext',
+    constructorPath: ['citext', 'Citext'],
     args: [],
     pack: {
       id: 'citext',

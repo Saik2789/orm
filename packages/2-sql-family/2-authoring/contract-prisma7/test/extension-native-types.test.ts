@@ -26,7 +26,7 @@ const binding: Prisma7TargetBinding = {
     ...prisma7PostgresBinding.typeMap,
     extensionNativeTypes: {
       Shout: {
-        constructorName: 'shout.Shout',
+        constructorPath: ['shout', 'Shout'],
         args: [],
         pack: { id: 'shout', importName: 'shout', importPath: '@example/shout/control' },
       },

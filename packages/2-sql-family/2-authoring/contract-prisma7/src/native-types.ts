@@ -4,7 +4,7 @@
  * itself is target knowledge, supplied by the target binding.
  */
 export interface Prisma7TypeMapping {
-  readonly constructorName: string;
+  readonly constructorPath: readonly string[];
   /** The values of the constructor's arguments, as the constructor takes them. */
   readonly args: readonly unknown[];
 }

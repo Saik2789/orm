@@ -1313,11 +1313,11 @@ function readField(args: ReadFieldArgs): void {
     const mapping = native?.kind === 'mapped' ? native.mapping : scalar;
     fieldType =
       nativeType === undefined || nativeType.attribute.args.length === 0
-        ? { kind: 'values', path: mapping.constructorName.split('.'), values: mapping.args }
+        ? { kind: 'values', path: mapping.constructorPath, values: mapping.args }
         : {
             kind: 'written',
             call: {
-              path: mapping.constructorName.split('.'),
+              path: mapping.constructorPath,
               args: nativeType.attribute.args,
               span: nativeType.attribute.span,
             },

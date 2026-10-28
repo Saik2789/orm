@@ -17,7 +17,7 @@ describe('the Postgres target reads @db.Citext as this pack', () => {
   it('names the pack id and the constructor the pack registers, marked inferred', () => {
     const typeConstructor = getAuthoringTypeConstructor(
       citextControl.authoring,
-      declared?.constructorName.split('.') ?? [],
+      declared?.constructorPath ?? [],
     );
     expect({ packId: declared?.pack.id, typeConstructor }).toEqual({
       packId: citextControl.id,
