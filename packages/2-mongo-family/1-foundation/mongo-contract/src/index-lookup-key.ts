@@ -35,17 +35,13 @@ export type MongoIndexLookupInput = { readonly keys: ReadonlyArray<MongoIndexKey
   readonly [Option in MongoIndexOptionKey]?: MongoIndexInput[Option] | undefined;
 };
 
-function keysOf(index: MongoIndexLookupInput): string {
-  return index.keys.map((k) => `${k.field}:${k.direction}`).join(',');
-}
-
-/** Identifies an index by its keys and the options it sets; an option set to `false` counts as unset. */
+/** Identifies an index by its keys and the options it sets; an option set to `false` counts as unset. No field name or option value can make two different indexes share a key. */
 export function indexLookupKey(index: MongoIndexLookupInput): string {
-  const options = MONGO_INDEX_OPTION_KEYS.flatMap((option) => {
-    const value = index[option];
-    return value === undefined || value === null || value === false
-      ? []
-      : [`${option}:${canonicalize(value)}`];
-  });
-  return options.length > 0 ? `${keysOf(index)}|${options.join(';')}` : keysOf(index);
+  const options = Object.fromEntries(
+    MONGO_INDEX_OPTION_KEYS.flatMap((option) => {
+      const value = index[option];
+      return value === undefined || value === null || value === false ? [] : [[option, value]];
+    }),
+  );
+  return canonicalize({ keys: index.keys.map((k) => [k.field, k.direction]), options });
 }

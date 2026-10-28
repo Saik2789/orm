@@ -40,22 +40,30 @@ describe('indexLookupKey', () => {
           { language_override: 'lang' },
         ].map(lookupKey),
       ).size,
-    }).toEqual({ plain: 'email:1', notSparse: 'email:1', reordered: true, distinct: 10 });
+    }).toEqual({ plain: lookupKey({}), notSparse: lookupKey({}), reordered: true, distinct: 10 });
   });
 
   it('gives unique set to false, sparse set to false and no options the same key, and a set option another', () => {
+    const unset = lookupKey({});
     expect({
-      notUnique: lookupKey({ unique: false }),
-      notSparse: lookupKey({ sparse: false }),
-      unset: lookupKey({}),
-      sparse: lookupKey({ sparse: true }),
-      collation: lookupKey({ collation: { locale: 'fr' } }),
-    }).toEqual({
-      notUnique: 'email:1',
-      notSparse: 'email:1',
-      unset: 'email:1',
-      sparse: 'email:1|sparse:true',
-      collation: 'email:1|collation:{"locale":"fr"}',
-    });
+      notUnique: lookupKey({ unique: false }) === unset,
+      notSparse: lookupKey({ sparse: false }) === unset,
+      sparse: lookupKey({ sparse: true }) === unset,
+      collation: lookupKey({ collation: { locale: 'fr' } }) === unset,
+    }).toEqual({ notUnique: true, notSparse: true, sparse: false, collation: false });
+  });
+
+  it.each([
+    ['a comma and a colon', [{ field: 'a:1,b', direction: 1 as const }]],
+    ['a pipe', [{ field: 'a:1|expireAfterSeconds', direction: 1 as const }]],
+    ['a semicolon', [{ field: 'a:1|sparse:true;expireAfterSeconds', direction: 1 as const }]],
+  ])('tells apart a stored field name with %s from the indexes its text spells', (_, oddKeys) => {
+    const a = [{ field: 'a', direction: 1 as const }];
+    const spelled = [
+      indexLookupKey(new MongoIndex({ keys: [...a, { field: 'b', direction: 1 }] })),
+      indexLookupKey(new MongoIndex({ keys: a, expireAfterSeconds: 1 })),
+      indexLookupKey(new MongoIndex({ keys: a, sparse: true, expireAfterSeconds: 1 })),
+    ];
+    expect(spelled).not.toContain(indexLookupKey(new MongoIndex({ keys: oddKeys })));
   });
 });

@@ -94,6 +94,21 @@ describe('the builder merges identical and redundant indexes in a collection', (
     ]);
   });
 
+  it('keeps an index on a field whose stored name spells another index', () => {
+    const odd = { ...scalar('odd'), storedName: 'a:1,b' };
+    expect(
+      indexesOf([
+        {
+          ...inUsers('User', [{ fields: { a: 1, b: 1 } }, { fields: { odd: 1 } }]),
+          fields: [...fields, odd],
+        },
+      ]),
+    ).toEqual([
+      { kind: 'mongo-index', keys: ab },
+      { kind: 'mongo-index', keys: [{ field: 'a:1,b', direction: 1 }] },
+    ]);
+  });
+
   it('keeps two indexes on the same fields in another order', () => {
     expect(
       indexesOf([inUsers('User', [{ fields: { a: 1, b: 1 } }, { fields: { b: 1, a: 1 } }])]),

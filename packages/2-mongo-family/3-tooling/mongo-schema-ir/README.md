@@ -39,7 +39,7 @@ ir.collection('users');     // MongoSchemaCollection
 ir.collectionNames;         // ['users']
 ir.collections;             // sorted ReadonlyArray<MongoSchemaCollection>
 
-indexLookupKey(index); // 'email:1|unique:true'
+indexLookupKey(index); // '{"keys":[["email",1]],"options":{"unique":true}}'
 ```
 
 ## Architecture
