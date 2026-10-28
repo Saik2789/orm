@@ -14,9 +14,7 @@ import { storedFieldNameIn } from './build-models';
 import type { BuildRefusal, IndexKey, IndexShapeRule } from './build-refusals';
 import type { FieldNode, IndexNode, ModelNode } from './contract-definition';
 
-/**
- * A key-sorted signature of a storage index, used only to find duplicate indexes. `canonicalStringify` refuses class instances such as `MongoIndex`, so this reads their enumerable properties instead.
- */
+/** `canonicalStringify` refuses class instances such as `MongoIndex`, so this reads their enumerable properties instead. */
 function stableStringify(value: unknown): string {
   if (Array.isArray(value)) {
     return `[${value.map(stableStringify).join(',')}]`;
@@ -30,6 +28,15 @@ function stableStringify(value: unknown): string {
   }
 
   return JSON.stringify(value);
+}
+
+/** Two indexes with the same coverage key differ at most in `unique`. An option set to `false` counts as unset, as the migration planner counts it. */
+function coverageKey(index: MongoIndex): string {
+  return stableStringify(
+    Object.fromEntries(
+      Object.entries(index).filter(([option, value]) => option !== 'unique' && value !== false),
+    ),
+  );
 }
 
 function storedIndexKey(fields: readonly FieldNode[], key: string): string {
@@ -165,7 +172,7 @@ export function buildCollections(input: {
 }): Record<string, MongoCollectionInput> {
   const { models, variantValues, refusals } = input;
   const intermediate: Record<string, MongoCollectionInput> = {};
-  const declaredIndexOwners = new Map<string, string>();
+  const indexesByCollection = new Map<string, MongoIndex[]>();
   const textIndexCollections = new Set<string>();
   const modelsByName = new Map(models.map((model) => [model.modelName, model]));
 
@@ -177,7 +184,8 @@ export function buildCollections(input: {
     }
     const collectionKey = { kind: 'collectionSettings', model: modelName } as const;
     const existingCollection: MongoCollectionInput = intermediate[collection] ?? {};
-    const existingIndexes = existingCollection.indexes ?? [];
+    const collectionIndexes = indexesByCollection.get(collection) ?? [];
+    indexesByCollection.set(collection, collectionIndexes);
 
     if (existingCollection.options && model.collectionOptions) {
       refusals.push({
@@ -197,7 +205,7 @@ export function buildCollections(input: {
     }
 
     const polymorphicScope = resolveVariantScope(model, modelsByName, variantValues);
-    const storageIndexes: MongoIndex[] = [];
+    let indexesChanged = false;
     (model.indexes ?? []).forEach((written, position) => {
       const key: IndexKey = { kind: 'index', model: modelName, position };
       const signature = canonicalStringify(written);
@@ -211,13 +219,6 @@ export function buildCollections(input: {
         refusals.push({ kind: 'indexShape', key, rule: shapeProblem, signature });
         return;
       }
-      if (isTextIndex(written)) {
-        if (textIndexCollections.has(collection)) {
-          refusals.push({ kind: 'indexShape', key, rule: 'second-text-index', signature });
-          return;
-        }
-        textIndexCollections.add(collection);
-      }
       const storageIndex = toStorageIndex(written, model.fields);
       const scoped =
         polymorphicScope === undefined
@@ -227,15 +228,21 @@ export function buildCollections(input: {
         refusals.push({ kind: 'indexScopeConflict', key, reason: scoped.reason, signature });
         return;
       }
-      // Duplicates are found after variant scoping: sibling variants may index the same field, and their scoped indexes differ by partialFilterExpression.
-      const collectionIndexKey = `${collection}:${stableStringify(scoped.index)}`;
-      const firstModel = declaredIndexOwners.get(collectionIndexKey);
-      if (firstModel !== undefined) {
-        refusals.push({ kind: 'indexDuplicate', key, collection, firstModel, signature });
-        return;
+      const coverage = coverageKey(scoped.index);
+      const coveredAt = collectionIndexes.findIndex((held) => coverageKey(held) === coverage);
+      const held = collectionIndexes[coveredAt];
+      if (held !== undefined) {
+        if (held.unique === true || scoped.index.unique !== true) return;
+        collectionIndexes.splice(coveredAt, 1);
+      } else if (isTextIndex(written)) {
+        if (textIndexCollections.has(collection)) {
+          refusals.push({ kind: 'indexShape', key, rule: 'second-text-index', signature });
+          return;
+        }
+        textIndexCollections.add(collection);
       }
-      declaredIndexOwners.set(collectionIndexKey, modelName);
-      storageIndexes.push(scoped.index);
+      collectionIndexes.push(scoped.index);
+      indexesChanged = true;
     });
 
     const storageOptions = model.collectionOptions
@@ -243,19 +250,18 @@ export function buildCollections(input: {
       : undefined;
     const controlPatch = model.controlPolicy !== undefined ? { control: model.controlPolicy } : {};
 
-    intermediate[collection] =
-      storageIndexes.length > 0
-        ? {
-            ...existingCollection,
-            indexes: [...existingIndexes, ...storageIndexes],
-            ...(storageOptions ? { options: storageOptions } : {}),
-            ...controlPatch,
-          }
-        : storageOptions
-          ? { ...existingCollection, options: storageOptions, ...controlPatch }
-          : Object.keys(controlPatch).length > 0
-            ? { ...existingCollection, ...controlPatch }
-            : existingCollection;
+    intermediate[collection] = indexesChanged
+      ? {
+          ...existingCollection,
+          indexes: [...collectionIndexes],
+          ...(storageOptions ? { options: storageOptions } : {}),
+          ...controlPatch,
+        }
+      : storageOptions
+        ? { ...existingCollection, options: storageOptions, ...controlPatch }
+        : Object.keys(controlPatch).length > 0
+          ? { ...existingCollection, ...controlPatch }
+          : existingCollection;
   }
 
   return intermediate;
