@@ -539,13 +539,18 @@ export const pgXml = namedOnly('pg/xml', 'xml', readString('pg/xml'), fromText);
 
 const OID_RANGE = { min: 0, max: 4294967295 } as const;
 
+/** Whether a number is one `oid` stores: a whole number from 0 to 4294967295. */
+export function isPgOid(value: number): boolean {
+  return Number.isInteger(value) && value >= OID_RANGE.min && value <= OID_RANGE.max;
+}
+
 /** An integer as `oid` stores it: an unsigned 32-bit number, refused outside that range. */
 const asOid: Cast = (value) => {
   if (typeof value !== 'number' && typeof value !== 'string') {
     return refuseWrongShape(value, 'a number or digit text');
   }
   const converted = Number(value);
-  if (Number.isInteger(converted) && converted >= OID_RANGE.min && converted <= OID_RANGE.max) {
+  if (isPgOid(converted)) {
     return converted;
   }
   throw structuredError(

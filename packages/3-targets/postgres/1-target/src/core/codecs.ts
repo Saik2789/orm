@@ -109,6 +109,7 @@ import {
 } from './codec-ids';
 import type { PgInterval } from './data-type-values';
 import {
+  isPgOid,
   pgBit,
   pgBitLengthParams,
   pgBool,
@@ -1125,7 +1126,12 @@ export class PgOidCodec extends CodecImpl<
   number
 > {
   async toWire(value: number, _ctx: CodecCallContext): Promise<number> {
-    return value;
+    if (isPgOid(value)) return value;
+    throw postgresError(
+      'RUNTIME.ENCODE_FAILED',
+      'pg/oid@1 application value must be a whole number from 0 to 4294967295',
+      { meta: { codecId: PG_OID_CODEC_ID, received: value } },
+    );
   }
   async fromWire(wire: string | number, _ctx: CodecCallContext): Promise<number> {
     return decodePostgresNumberWire(wire);

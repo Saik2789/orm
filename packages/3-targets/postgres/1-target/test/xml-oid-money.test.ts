@@ -77,6 +77,24 @@ describe('pg/oid', () => {
       codec.toDataTypeValue(4294967295).value,
     ]).toEqual([4294967295, 0, 42, 4294967295]);
   });
+
+  it('sends both ends of its range', async () => {
+    const codec = pgOidDescriptor.factory()(instanceCtx);
+    expect([await codec.toWire(0, callCtx), await codec.toWire(4294967295, callCtx)]).toEqual([
+      0, 4294967295,
+    ]);
+  });
+
+  it.each([-1, 4294967296, 1.5])(
+    'refuses to send %j, which PostgreSQL would wrap or reject',
+    async (value) => {
+      const codec = pgOidDescriptor.factory()(instanceCtx);
+      await expect(codec.toWire(value, callCtx)).rejects.toMatchObject({
+        code: 'RUNTIME.ENCODE_FAILED',
+        meta: { codecId: 'pg/oid@1', received: value },
+      });
+    },
+  );
 });
 
 describe('pg/money', () => {
@@ -160,7 +178,7 @@ describe('pg/money', () => {
       });
     });
 
-    it('sends digit text with two fraction digits, which PostgreSQL reads under lc_monetary C', async () => {
+    it('sends digit text with two fraction digits, which the adapter casts through numeric', async () => {
       expect([await codec.toWire('-1234.56', callCtx), await codec.toWire('7', callCtx)]).toEqual([
         '-1234.56',
         '7.00',
