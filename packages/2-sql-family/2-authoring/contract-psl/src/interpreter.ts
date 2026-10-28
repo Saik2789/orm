@@ -101,6 +101,7 @@ import { deriveValueSetFromEntity } from '@internal/sql-contract/value-set-deriv
 import {
   buildSqlContractFromDefinition,
   type CheckNode,
+  composedExtensionPackRefs,
   type EnumTypeHandle,
   type FieldNode,
   type ForeignKeyNode,
@@ -193,32 +194,6 @@ export interface InterpretPslDocumentToSqlContractInput {
   /** The target's default codec ids for an `enum` block that omits `@@type`. */
   readonly enumInferenceCodecs?: { readonly text: string; readonly int: string };
   readonly capabilities: CapabilityMatrix;
-}
-
-function buildComposedExtensionPackRefs(
-  target: TargetPackRef<'sql', string>,
-  extensionIds: readonly string[],
-  extensionPackRefs: readonly ExtensionPackRef<'sql', string>[] = [],
-): Record<string, ExtensionPackRef<'sql', string>> | undefined {
-  if (extensionIds.length === 0) {
-    return undefined;
-  }
-
-  const extensionPackRefById = new Map(extensionPackRefs.map((packRef) => [packRef.id, packRef]));
-
-  return Object.fromEntries(
-    extensionIds.map((extensionId) => [
-      extensionId,
-      extensionPackRefById.get(extensionId) ??
-        ({
-          kind: 'extension',
-          id: extensionId,
-          familyId: target.familyId,
-          targetId: target.targetId,
-          version: '0.0.1',
-        } satisfies ExtensionPackRef<'sql', string>),
-    ]),
-  );
 }
 
 function compareStrings(left: string, right: string): -1 | 0 | 1 {
@@ -2753,9 +2728,9 @@ export function interpretPslDocumentToSqlContract(
         warnings: authoringWarnings.length > 0 ? authoringWarnings : undefined,
         ...ifDefined(
           'extensions',
-          buildComposedExtensionPackRefs(
+          composedExtensionPackRefs(
             input.target,
-            [...composedExtensions].sort(compareStrings),
+            composedExtensions,
             input.composedExtensionPackRefs,
           ),
         ),

@@ -17,7 +17,6 @@ import {
 import type { CodecLookupWithDescriptors } from '@internal/framework-components/codec';
 import {
   EMPTY_GENERATOR_FUNCTIONS,
-  type ExtensionPackRef,
   type GeneratorFunctionRegistry,
 } from '@internal/framework-components/components';
 import {
@@ -72,6 +71,7 @@ import {
 import {
   buildSqlContractFromDefinition,
   type ColumnNode,
+  composedExtensionPackRefs,
   type FieldNode,
   type ModelNode,
   type TableNode,
@@ -616,7 +616,10 @@ export function interpretPrisma7Documents(
         target: binding.target,
         warnings: undefined,
         createNamespace,
-        ...ifDefined('extensions', composedExtensionPackRefs(input)),
+        ...ifDefined(
+          'extensions',
+          composedExtensionPackRefs(binding.target, input.composedExtensions),
+        ),
         ...(namespaceEntities.size > 0 ? { namespaces: [...namespaceEntities.keys()] } : {}),
         models: modelNodes,
         ...(tables.length > 0 ? { tables } : {}),
@@ -624,19 +627,6 @@ export function interpretPrisma7Documents(
       input.codecLookup,
       input.dataTypes.lookup,
     ),
-  );
-}
-
-/** Each composed extension pack, which the contract requires at runtime, as the Prisma 8 schema reader records them. */
-function composedExtensionPackRefs(
-  input: InterpretPrisma7DocumentsInput,
-): Record<string, ExtensionPackRef<'sql', string>> | undefined {
-  if (input.composedExtensions.length === 0) return undefined;
-  const { familyId, targetId } = input.binding.target;
-  return Object.fromEntries(
-    [...input.composedExtensions]
-      .sort()
-      .map((id) => [id, { kind: 'extension', id, familyId, targetId, version: '0.0.1' }]),
   );
 }
 
