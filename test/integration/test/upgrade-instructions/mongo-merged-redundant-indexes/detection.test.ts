@@ -81,3 +81,25 @@ describe('the extension mongo-build-refusal-index-duplicate-removed detection', 
     ]).toEqual([true, true, false, false]);
   });
 });
+
+describe('the extension mongo-index-lookup-key-moved detection', () => {
+  const movedMatches = (content: string) =>
+    detectionPatterns(EXTENSION_GUIDE, 'mongo-index-lookup-key-moved').some((pattern) =>
+      pattern.test(content),
+    );
+
+  it('matches an import of a moved name from schema-ir, and not other schema-ir imports or the new home', () => {
+    expect([
+      movedMatches(
+        "import { MongoSchemaIndex, indexLookupKey } from '@prisma/orm-family-mongo/schema-ir';",
+      ),
+      movedMatches(
+        "import type {\n  MongoIndexOptionKey,\n} from '@prisma/orm-family-mongo/schema-ir';",
+      ),
+      movedMatches(
+        "import { deepEqual, MongoSchemaIndex } from '@prisma/orm-family-mongo/schema-ir';",
+      ),
+      movedMatches("import { indexLookupKey } from '@prisma/orm-family-mongo/contract';"),
+    ]).toEqual([true, true, false, false]);
+  });
+});
