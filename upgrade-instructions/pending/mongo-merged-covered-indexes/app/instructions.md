@@ -6,11 +6,11 @@ changes:
     detection:
       glob: "**/*.{ts,mts,cts,tsx,prisma}"
       matches:
-        - '(?<![\s\S])(?=[\s\S]*(?:\bObjectId\b|"mongodb"))[\s\S]*\n\s*(\w+)\s[^\n]*@unique\b[\s\S]*@@index\(\[\1\]'
-        - '(?<![\s\S])(?=[\s\S]*(?:\bObjectId\b|"mongodb"))[\s\S]*@@unique\((\[[^\]]*\])[\s\S]*@@index\(\1'
-        - '(?<![\s\S])(?=[\s\S]*(?:\bObjectId\b|"mongodb"))[\s\S]*@@index\((\[[^\]]*\])[\s\S]*@@unique\(\1'
-        - '@prisma/orm-(?:mongo|family-mongo/contract-ts)/contract-builder[\x27"][\s\S]*\bindex\(\s*(\{[^}]*\})\s*,\s*\{[^}]*\bunique\s*:\s*true[\s\S]*\bindex\(\s*\1\s*\)'
-        - '@prisma/orm-(?:mongo|family-mongo/contract-ts)/contract-builder[\x27"][\s\S]*\bindex\(\s*(\{[^}]*\})\s*\)[\s\S]*\bindex\(\s*\1\s*,\s*\{[^}]*\bunique\s*:\s*true'
+        - '(?<![\s\S])(?=[\s\S]*(?:\bObjectId\b|"mongodb"))[\s\S]*\n\s*(\w+)\s[^\n]*@unique\b(?!\()[\s\S]*@@index\(\[\1\]\)'
+        - '(?<![\s\S])(?=[\s\S]*(?:\bObjectId\b|"mongodb"))[\s\S]*@@unique\((\[[^\]]*\])\)[\s\S]*@@index\(\1\)'
+        - '(?<![\s\S])(?=[\s\S]*(?:\bObjectId\b|"mongodb"))[\s\S]*@@index\((\[[^\]]*\])\)[\s\S]*@@unique\(\1\)'
+        - '@prisma/orm-(?:mongo|family-mongo/contract-ts)/contract-builder[\x27"][\s\S]*\bindex\(\s*(\{[^}]*\})\s*,\s*\{\s*unique\s*:\s*true\s*\}\s*\)[\s\S]*\bindex\(\s*\1\s*\)'
+        - '@prisma/orm-(?:mongo|family-mongo/contract-ts)/contract-builder[\x27"][\s\S]*\bindex\(\s*(\{[^}]*\})\s*\)[\s\S]*\bindex\(\s*\1\s*,\s*\{\s*unique\s*:\s*true\s*\}\s*\)'
 ---
 
 # MongoDB indexes another index covers are merged
@@ -34,4 +34,6 @@ The detection matches a MongoDB schema or `defineContract` file that writes a un
 
 1. Run `prisma contract emit`. If the storage hash changed, the contract held a unique and a plain index on the same keys.
 2. A migration planned before this upgrade that creates both indexes never applied: its second `createIndex` fails with `MIGRATION.PRECHECK_FAILED`. Delete it and run `prisma migration plan` again.
-3. If `prisma migration apply` stopped part way on that migration, the first index may already exist. Run `prisma db verify` before applying the new plan.
+3. If `prisma migration apply` stopped part way on that migration, the index the migration created first is still in the database:
+   - If it is the unique index, do nothing. The new migration finds it and skips creating it.
+   - If it is the plain index, drop it before you apply the new migration, or its `createIndex` fails again with `MIGRATION.PRECHECK_FAILED`. This happens when the plain index was written first, for example `index({ email: 1 })` before `index({ email: 1 }, { unique: true })`, or `@@index([email])` on a model before `email String @unique` on a later model in the same collection. In `mongosh`, drop it by its key pattern, so its name does not matter: `db.users.dropIndex({ email: 1 })`.

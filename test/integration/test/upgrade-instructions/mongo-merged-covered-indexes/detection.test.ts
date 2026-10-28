@@ -32,7 +32,8 @@ describe('the app mongo-merged-covered-indexes detection', () => {
       matches(mongoModel('  a String\n  b String\n  @@unique([a, b])\n  @@index([b, a])')),
       matches('model User {\n  id Int @id\n  email String @unique\n  @@index([email])\n}\n'),
       matches(mongoModel('  email String\n  @@index([email])\n  @@index([email])')),
-    ]).toEqual([false, false, false, false]);
+      matches(mongoModel('  email String @unique\n  @@index([email], sparse: true)')),
+    ]).toEqual([false, false, false, false, false]);
   });
 
   it('matches a defineContract file with a unique and a plain index on the same keys', () => {
@@ -55,6 +56,9 @@ describe('the app mongo-merged-covered-indexes detection', () => {
         `${mongoBuilderImport}indexes: [index({ email: 1 }, { unique: true }), index({ email: -1 })]`,
       ),
       matches('indexes: [index({ email: 1 }, { unique: true }), index({ email: 1 })]'),
-    ]).toEqual([false, false, false]);
+      matches(
+        `${mongoBuilderImport}indexes: [index({ email: 1 }, { unique: true, sparse: true }), index({ email: 1 })]`,
+      ),
+    ]).toEqual([false, false, false, false]);
   });
 });
