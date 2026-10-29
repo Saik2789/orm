@@ -100,6 +100,19 @@ describe('contract infer writes installed extensions', () => {
     );
   });
 
+  it('writes a hyphenated extension name as the block name', async () => {
+    const printed = await inferred({ 'uuid-ossp': 'extensions' });
+    expect(printed).toContain(
+      ['namespace extensions {', '  extension uuid-ossp {', '  }', '}'].join('\n'),
+    );
+  });
+
+  it('refuses an extension whose name PSL cannot write', async () => {
+    await expect(inferred({ 'odd.name': 'public' })).rejects.toThrow(
+      'contract infer: extension "odd.name" is installed, and its name cannot be written as a PSL block name. Declare it in a TypeScript contract with extension("odd.name").',
+    );
+  });
+
   it('skips an extension a composed pack declares', async () => {
     const printed = await inferred({ vector: 'public', pg_trgm: 'public' }, [
       packDeclaring('vector'),

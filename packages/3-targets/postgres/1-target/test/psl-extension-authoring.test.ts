@@ -200,6 +200,14 @@ model User {
     );
   });
 
+  it('writes a hyphenated extension name as the block name, and reads it back', () => {
+    const printed = print(interpret('extension uuid-ossp {}\n\nmodel User {\n  id Int @id\n}\n'));
+    expect(printed).toContain(['  extension uuid-ossp {', '  }'].join('\n'));
+    expect(extensionsOf(interpret(printed), 'public')).toEqual({
+      'uuid-ossp': new PostgresExtension({ name: 'uuid-ossp' }),
+    });
+  });
+
   it('reads back the extensions it printed', () => {
     const reread = interpret(print(interpret(source)));
     expect(extensionsOf(reread, 'public')).toEqual({

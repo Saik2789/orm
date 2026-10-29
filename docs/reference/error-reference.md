@@ -344,6 +344,8 @@ A model declares an empty unique constraint (a unique with no fields), raised du
   - an enum and a native enum would derive the same value set (meta: `namespaceId`, `name`);
   - a native enum has no value set holding its members (meta: `namespaceId`, `typeName`);
   - a native enum has its own control policy (meta: `namespaceId`, `typeName`, `control`).
+- Extensions:
+  - an extension has its own control policy (meta: `namespaceId`, `name`, `control`).
 - Namespaces, meta and roots:
   - a storage or domain namespace holds nothing PSL writes, or the contract lacks a namespace the PSL source would create, such as the default namespace (meta: `plane`, `namespaceId`);
   - a namespace is named `unbound` and is not the late-binding namespace, which PSL writes as `namespace unbound` (meta: `namespaceId`);
@@ -356,7 +358,7 @@ A model declares an empty unique constraint (a unique with no fields), raised du
   - a policy is on a table without row-level security (meta: `namespaceId`, `table`, `name`);
   - a wire-named policy's name is not its block name followed by the hash of its content (meta: `namespaceId`, `table`, `name`);
   - a role is declared outside the unbound namespace (meta: `namespaceId`, `name`);
-  - a row-level security setting or role is filed under a key the PSL source would not file it under (meta: `namespaceId`, `kind`, `name`);
+  - a row-level security setting, role or extension is filed under a key the PSL source would not file it under (meta: `namespaceId`, `kind`, `name`);
   - a row-level security setting, role or policy records a namespace other than the one it is stored in (meta: `namespaceId`, `kind`, `name`).
 - Names and storage entries:
   - a table or column is named `__proto__`, which the PSL source loses when it reads the name from `@@map` or `@map` (meta: `kind`, `name`);

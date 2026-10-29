@@ -19,6 +19,7 @@ import {
   makePslNamespaceEntries,
   UNSPECIFIED_PSL_NAMESPACE_ID,
 } from '@internal/framework-components/psl-ast';
+import { isPslIdentifier } from '@internal/psl-parser';
 import { type SqlColumnIR, SqlSchemaIR, SqlTableIR } from '@internal/sql-schema-ir/types';
 import { postgresError } from '../errors';
 import { DEFAULT_NAMESPACE_ID } from '../namespace-ids';
@@ -280,6 +281,13 @@ function inferredExtensionBlocks(
   for (const extension of tree.extensions) {
     if (extension.name === ALWAYS_INSTALLED_EXTENSION || packExtensions.has(extension.name)) {
       continue;
+    }
+    if (!isPslIdentifier(extension.name)) {
+      throw postgresError(
+        'CONTRACT.INFER_UNSUPPORTED',
+        `contract infer: extension "${extension.name}" is installed, and its name cannot be written as a PSL block name. Declare it in a TypeScript contract with extension("${extension.name}").`,
+        { meta: { extensionName: extension.name } },
+      );
     }
     const blocks = blocksBySchema.get(extension.schemaName) ?? [];
     blocks.push(buildExtensionBlock(extension.name));
