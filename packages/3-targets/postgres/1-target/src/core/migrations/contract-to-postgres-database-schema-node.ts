@@ -104,6 +104,7 @@ export function contractToPostgresDatabaseSchemaNode(
     return new PostgresDatabaseSchemaNode({
       namespaces: {},
       roles: [],
+      extensions: [],
       existingSchemas: [],
       pgVersion: '',
     });

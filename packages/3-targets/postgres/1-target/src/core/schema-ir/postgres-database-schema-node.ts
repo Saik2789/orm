@@ -9,7 +9,7 @@ import { PostgresSchemaNodeKind } from './schema-node-kinds';
 export interface PostgresDatabaseSchemaNodeInput {
   readonly namespaces: Readonly<Record<string, PostgresNamespaceSchemaNode>>;
   readonly roles: readonly PostgresRoleSchemaNode[];
-  readonly extensions?: readonly PostgresExtensionSchemaNode[];
+  readonly extensions: readonly PostgresExtensionSchemaNode[] | undefined;
   readonly existingSchemas: readonly string[];
   readonly pgVersion: string;
 }

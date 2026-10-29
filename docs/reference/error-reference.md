@@ -1579,7 +1579,7 @@ A contract snapshot expected under `migrations/snapshots/` for a given storage h
 
 ### MIGRATION.CONTRACT_SPACE_LAYOUT_VIOLATION
 
-The on-disk `migrations/` directory and the `extensions` declaration in config disagree: an orphan space directory exists with no declaring extension, or a declared extension has no migrations directory. All layout offences are bundled into one envelope. Raised when db commands load the contract-space aggregate. Payload: `violations` (list of `{kind, spaceId}`).
+The on-disk `migrations/` directory and the `extensions` declaration in config disagree: an orphan space directory exists with no declaring extension, or a declared extension has no migrations directory. All layout offences are bundled into one envelope. Raised when db commands load the contract-space aggregate. A declared pack's missing directory is written by `prisma contract emit` or `prisma migration plan`; an orphan directory is fixed by declaring its extension or removing the directory. Payload: `violations` (list of `{kind, spaceId}`).
 
 ### MIGRATION.CONTRACT_SPACE_VIOLATION
 
