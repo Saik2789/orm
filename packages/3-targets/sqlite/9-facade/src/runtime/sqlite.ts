@@ -351,9 +351,15 @@ export default function sqlite<
       }
 
       if (driverConnected || connectPromise) {
-        throw sqliteError('DRIVER.ALREADY_CONNECTED', 'SQLite client already connected', {
-          meta: { extension: 'sqlite' },
-        });
+        if (bindingInput !== undefined) {
+          throw sqliteError('DRIVER.ALREADY_CONNECTED', 'SQLite client already connected', {
+            fix: 'Options were passed to a client that is already bound. Call connect() without options, or create a new client for another database.',
+            meta: { extension: 'sqlite' },
+          });
+        }
+        const runtime = getRuntime();
+        await connectPromise;
+        return runtime;
       }
 
       backgroundConnectError = undefined;
