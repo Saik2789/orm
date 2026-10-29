@@ -215,6 +215,8 @@ export const pslContractFixtures = {
   'contract-base': join(JOURNEY_FIXTURES_DIR, 'contract-base.prisma'),
   'contract-additive': join(JOURNEY_FIXTURES_DIR, 'contract-additive.prisma'),
   'contract-composite-pk': join(JOURNEY_FIXTURES_DIR, 'contract-composite-pk.prisma'),
+  'contract-extensions': join(JOURNEY_FIXTURES_DIR, 'contract-extensions.prisma'),
+  'contract-extensions-name': join(JOURNEY_FIXTURES_DIR, 'contract-extensions-name.prisma'),
   'contract-index-upgrade': join(JOURNEY_FIXTURES_DIR, 'contract-index-upgrade.prisma'),
   'contract-expression-authored': join(JOURNEY_FIXTURES_DIR, 'contract-expression-authored.prisma'),
   'contract-expression-authored-renamed': join(

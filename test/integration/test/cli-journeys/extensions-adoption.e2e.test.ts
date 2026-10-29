@@ -1,0 +1,98 @@
+/**
+ * Adopting a database that has two Postgres extensions: `pg_trgm`, which the app contract declares, and `vector`, which the composed pgvector pack declares. `contract emit` writes the pack's pinned files, `db sign` writes both markers without running a migration, and `db verify --strict` is clean. A later app change migrates with `db migrate`, and a fresh database built from `migrations/` alone ends up with both extensions.
+ */
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { withClient, withDevDatabase } from '@repo/test-utils';
+import stripAnsi from 'strip-ansi';
+import { describe, expect, it } from 'vitest';
+import { withTempDir } from '../utils/cli-test-helpers';
+import {
+  type JourneyContext,
+  planMigrationAndSelfEmit,
+  runContractEmit,
+  runDbSign,
+  runDbVerify,
+  runMigrate,
+  setupJourney,
+  swapPslContract,
+  timeouts,
+  useDevDatabase,
+} from '../utils/journey-test-helpers';
+
+const PRISMA7_DATABASE = `
+  CREATE EXTENSION pg_trgm;
+  CREATE EXTENSION vector;
+  CREATE TABLE "user" (id int4 PRIMARY KEY, email text NOT NULL);
+`;
+
+function composePgvector(ctx: JourneyContext): void {
+  const config = readFileSync(ctx.configPath, 'utf-8');
+  writeFileSync(
+    ctx.configPath,
+    `import pgvector from '@internal/extension-pgvector/control';\n${config.replace('extensions: []', 'extensions: [pgvector]')}`,
+  );
+}
+
+function output(run: { readonly stdout: string; readonly stderr: string }): string {
+  return stripAnsi(`${run.stdout}\n${run.stderr}`);
+}
+
+async function installedExtensions(connectionString: string): Promise<readonly string[]> {
+  return withClient(connectionString, async (client) => {
+    const result = await client.query(
+      "SELECT extname FROM pg_extension WHERE extname IN ('pg_trgm', 'vector') ORDER BY extname",
+    );
+    return result.rows.map((row) => row.extname);
+  });
+}
+
+withTempDir(({ createTempDir }) => {
+  describe('adopting a database with an app extension and a pack extension', () => {
+    const db = useDevDatabase({
+      onReady: (cs) => withClient(cs, (client) => client.query(PRISMA7_DATABASE)),
+    });
+
+    it(
+      'signs, verifies strictly, migrates a later change, and rebuilds a fresh database from migrations',
+      async () => {
+        const ctx = setupJourney({
+          connectionString: db.connectionString,
+          createTempDir,
+          contractMode: 'psl',
+        });
+        composePgvector(ctx);
+        swapPslContract(ctx, 'contract-extensions');
+
+        const emit = await runContractEmit(ctx);
+        expect(emit.exitCode, `contract emit\n${output(emit)}`).toBe(0);
+        const pgvectorDir = join(ctx.testDir, 'migrations', 'pgvector');
+        expect(existsSync(join(pgvectorDir, 'refs', 'head.json'))).toBe(true);
+
+        const sign = await runDbSign(ctx);
+        expect(sign.exitCode, `db sign\n${output(sign)}`).toBe(0);
+        const verify = await runDbVerify(ctx, ['--strict']);
+        expect(verify.exitCode, `db verify --strict\n${output(verify)}`).toBe(0);
+
+        swapPslContract(ctx, 'contract-extensions-name');
+        const emitChange = await runContractEmit(ctx);
+        expect(emitChange.exitCode, `contract emit\n${output(emitChange)}`).toBe(0);
+        const plan = await planMigrationAndSelfEmit(ctx, ['--name', 'add-name']);
+        expect(plan.exitCode, `migration plan\n${output(plan)}`).toBe(0);
+        const migrate = await runMigrate(ctx);
+        expect(migrate.exitCode, `db migrate\n${output(migrate)}`).toBe(0);
+        const verifyChange = await runDbVerify(ctx, ['--strict']);
+        expect(verifyChange.exitCode, `db verify --strict\n${output(verifyChange)}`).toBe(0);
+
+        await withDevDatabase(async ({ connectionString }) => {
+          const fresh = await runMigrate(ctx, ['--db', connectionString]);
+          expect(fresh.exitCode, `db migrate on a fresh database\n${output(fresh)}`).toBe(0);
+          expect(await installedExtensions(connectionString)).toEqual(['pg_trgm', 'vector']);
+          const verifyFresh = await runDbVerify(ctx, ['--strict', '--db', connectionString]);
+          expect(verifyFresh.exitCode, `db verify --strict\n${output(verifyFresh)}`).toBe(0);
+        });
+      },
+      timeouts.spinUpPpgDev * 2,
+    );
+  });
+});
