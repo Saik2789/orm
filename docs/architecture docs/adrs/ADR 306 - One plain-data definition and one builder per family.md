@@ -57,6 +57,8 @@ The builder checks the assembled contract last. Those refusals (kind `validator`
 - **PSL.** The interpreter reads the schema into the definition. It keeps the rules about how a schema is written, such as attribute arguments, `@id` placement, back-relation pairing and unresolved references. It reports each refusal as a diagnostic at the place its key names, with PSL's codes and wording.
 - **Prisma 6.** The reader builds with `writesCollectionValidators: false`, because a Prisma 6 database has none. It reports each refusal in its own diagnostics.
 
+**An earlier version's source is described exactly.** The Prisma 6 and Prisma 7 sources exist to produce the contract of the database that version built, so `db sign` accepts it unchanged (ADR 252). The builder checks their definitions like any other: a refusal is still a refusal. But a builder step that changes what a source wrote, such as merging indexes or adding one behind a foreign key, must not change what an earlier version's source describes. On SQL this holds because the Prisma 7 reader names every index, and the builder never merges or drops a named index. A builder change that adds such a step states how earlier versions' sources keep their description, and tests it.
+
 ## Consequences
 
 - One rule, one implementation. A rule added to the builder applies to every source.
