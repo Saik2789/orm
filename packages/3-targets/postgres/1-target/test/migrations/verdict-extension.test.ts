@@ -97,7 +97,8 @@ function actualTree(installed: Readonly<Record<string, string>>) {
     },
     roles: [],
     extensions: Object.entries(installed).map(
-      ([name, schemaName]) => new PostgresExtensionSchemaNode({ name, schemaName }),
+      ([name, schemaName]) =>
+        new PostgresExtensionSchemaNode({ name, schemaName, control: undefined }),
     ),
     existingSchemas: ['public', 'extensions'],
     pgVersion: 'unknown',
@@ -148,7 +149,11 @@ describe('the expected tree lists each declared extension with its namespace sch
       },
     );
     expect(tree.extensions).toEqual([
-      new PostgresExtensionSchemaNode({ name: 'pg_trgm', schemaName: 'public' }),
+      new PostgresExtensionSchemaNode({
+        name: 'pg_trgm',
+        schemaName: 'public',
+        control: undefined,
+      }),
       new PostgresExtensionSchemaNode({
         name: 'postgis',
         schemaName: 'extensions',
@@ -165,7 +170,11 @@ describe('the differ reports extension drift', () => {
     expect(extensionIssues(contract, actualTree({ pg_trgm: 'public' }))).toEqual([
       {
         path: ['database', 'postgis'],
-        expected: new PostgresExtensionSchemaNode({ name: 'postgis', schemaName: 'extensions' }),
+        expected: new PostgresExtensionSchemaNode({
+          name: 'postgis',
+          schemaName: 'extensions',
+          control: undefined,
+        }),
         actual: undefined,
       },
     ]);
@@ -176,8 +185,16 @@ describe('the differ reports extension drift', () => {
       [
         {
           path: ['database', 'postgis'],
-          expected: new PostgresExtensionSchemaNode({ name: 'postgis', schemaName: 'extensions' }),
-          actual: new PostgresExtensionSchemaNode({ name: 'postgis', schemaName: 'public' }),
+          expected: new PostgresExtensionSchemaNode({
+            name: 'postgis',
+            schemaName: 'extensions',
+            control: undefined,
+          }),
+          actual: new PostgresExtensionSchemaNode({
+            name: 'postgis',
+            schemaName: 'public',
+            control: undefined,
+          }),
         },
       ],
     );

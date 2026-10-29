@@ -34,7 +34,8 @@ function databaseWith(installed: Readonly<Record<string, string>>): PostgresData
     },
     roles: [],
     extensions: Object.entries(installed).map(
-      ([name, schemaName]) => new PostgresExtensionSchemaNode({ name, schemaName }),
+      ([name, schemaName]) =>
+        new PostgresExtensionSchemaNode({ name, schemaName, control: undefined }),
     ),
     existingSchemas: ['public'],
     pgVersion: 'unknown',

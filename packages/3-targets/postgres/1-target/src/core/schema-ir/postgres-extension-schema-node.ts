@@ -10,7 +10,7 @@ export interface PostgresExtensionSchemaNodeInput {
   /** The schema that holds the extension's objects (`pg_extension.extnamespace`). */
   readonly schemaName: string;
   /** The contract entity's control policy, on the expected side only. */
-  readonly control?: ControlPolicy;
+  readonly control: ControlPolicy | undefined;
 }
 
 /**

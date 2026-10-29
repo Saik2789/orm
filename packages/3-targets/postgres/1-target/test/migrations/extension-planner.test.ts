@@ -87,7 +87,8 @@ function liveDatabase(
     namespaces: {},
     roles: [],
     extensions: Object.entries(installed).map(
-      ([name, schemaName]) => new PostgresExtensionSchemaNode({ name, schemaName }),
+      ([name, schemaName]) =>
+        new PostgresExtensionSchemaNode({ name, schemaName, control: undefined }),
     ),
     existingSchemas,
     pgVersion: 'unknown',

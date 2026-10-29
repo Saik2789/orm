@@ -759,7 +759,12 @@ export class PostgresControlAdapter implements SqlControlAdapter<'postgres'> {
        ORDER BY e.extname`,
     );
     return result.rows.map(
-      (row) => new PostgresExtensionSchemaNode({ name: row.extname, schemaName: row.nspname }),
+      (row) =>
+        new PostgresExtensionSchemaNode({
+          name: row.extname,
+          schemaName: row.nspname,
+          control: undefined,
+        }),
     );
   }
 

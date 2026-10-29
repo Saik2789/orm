@@ -129,7 +129,7 @@ export function contractToPostgresDatabaseSchemaNode(
         new PostgresExtensionSchemaNode({
           name: extension.name,
           schemaName: resolveDdlSchemaForNamespaceStorage(contract.storage, ns.id),
-          ...ifDefined('control', extension.control),
+          control: extension.control,
         }),
       );
     }
