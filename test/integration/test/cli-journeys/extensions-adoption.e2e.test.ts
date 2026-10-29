@@ -3,6 +3,7 @@
  */
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import pgvector from '@internal/extension-pgvector/control';
 import { withClient, withDevDatabase } from '@repo/test-utils';
 import stripAnsi from 'strip-ansi';
 import { describe, expect, it } from 'vitest';
@@ -48,6 +49,34 @@ async function installedExtensions(connectionString: string): Promise<readonly s
   });
 }
 
+const pgvectorSpace = pgvector.contractSpace!;
+const pgvectorOneStepMigration = pgvectorSpace.migrations.find(
+  (m) => m.metadata.from === null && m.metadata.to === pgvectorSpace.headRef.hash,
+)?.dirName;
+
+async function markers(
+  connectionString: string,
+): Promise<Record<string, { readonly hash: string; readonly invariants: readonly string[] }>> {
+  return withClient(connectionString, async (client) => {
+    const result = await client.query(
+      'SELECT space, core_hash, invariants FROM prisma_contract.marker ORDER BY space',
+    );
+    return Object.fromEntries(
+      result.rows.map((row) => [row.space, { hash: row.core_hash, invariants: row.invariants }]),
+    );
+  });
+}
+
+async function appliedMigrations(connectionString: string, spaceId: string): Promise<string[]> {
+  return withClient(connectionString, async (client) => {
+    const result = await client.query(
+      'SELECT migration_name FROM prisma_contract.ledger WHERE space = $1 ORDER BY id',
+      [spaceId],
+    );
+    return result.rows.map((row) => row.migration_name);
+  });
+}
+
 withTempDir(({ createTempDir }) => {
   describe('adopting a database with an app extension and a pack extension', () => {
     const db = useDevDatabase({
@@ -72,6 +101,10 @@ withTempDir(({ createTempDir }) => {
 
         const sign = await runDbSign(ctx);
         expect(sign.exitCode, `db sign\n${output(sign)}`).toBe(0);
+        expect(await markers(db.connectionString)).toEqual({
+          app: { hash: expect.any(String), invariants: [] },
+          pgvector: { hash: pgvectorSpace.headRef.hash, invariants: [] },
+        });
         const verify = await runDbVerify(ctx, ['--strict']);
         expect(verify.exitCode, `db verify --strict\n${output(verify)}`).toBe(0);
 
@@ -89,6 +122,14 @@ withTempDir(({ createTempDir }) => {
           const fresh = await runMigrate(ctx, ['--db', connectionString]);
           expect(fresh.exitCode, `db migrate on a fresh database\n${output(fresh)}`).toBe(0);
           expect(await installedExtensions(connectionString)).toEqual(['pg_trgm', 'vector']);
+          expect(pgvectorOneStepMigration).toBeDefined();
+          expect(await appliedMigrations(connectionString, 'pgvector')).toEqual([
+            pgvectorOneStepMigration,
+          ]);
+          expect(await markers(connectionString)).toEqual({
+            app: { hash: expect.any(String), invariants: [] },
+            pgvector: { hash: pgvectorSpace.headRef.hash, invariants: [] },
+          });
           const verifyFresh = await runDbVerify(ctx, ['--strict', '--db', connectionString]);
           expect(verifyFresh.exitCode, `db verify --strict\n${output(verifyFresh)}`).toBe(0);
         });

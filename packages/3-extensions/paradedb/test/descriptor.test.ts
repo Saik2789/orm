@@ -1,4 +1,6 @@
+import { EMPTY_CONTRACT_HASH } from '@internal/migration-tools/constants';
 import { computeMigrationHash } from '@internal/migration-tools/hash';
+import { findPathWithDecision, reconstructGraph } from '@internal/migration-tools/migration-graph';
 import { assertDescriptorSelfConsistency } from '@internal/migration-tools/spaces';
 import { sqlContractCanonicalizationHooks } from '@internal/sql-contract/canonicalization-hooks';
 import { describe, expect, it } from 'vitest';
@@ -54,6 +56,16 @@ describe('paradedb extension descriptor', () => {
     const install = migration(PARADEDB_INSTALL_MIGRATION_NAME);
     expect(install.metadata).toMatchObject({ from: null, to: headHash, providedInvariants: [] });
     expect(install.ops.map((op) => op.id)).toEqual(['schema.public', 'extension.pg_search']);
+  });
+
+  it('takes an empty database to the head through the one-step migration', () => {
+    const graph = reconstructGraph(space.migrations.map((m) => ({ ...m, dirPath: m.dirName })));
+    const outcome = findPathWithDecision(graph, EMPTY_CONTRACT_HASH, headHash, {
+      required: new Set(space.headRef.invariants),
+    });
+    expect(
+      outcome.kind === 'ok' ? outcome.decision.selectedPath.map((edge) => edge.dirName) : outcome,
+    ).toEqual([PARADEDB_INSTALL_MIGRATION_NAME]);
   });
 
   it('points the head ref at the contract and requires no invariant', () => {
