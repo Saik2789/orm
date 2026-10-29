@@ -62,7 +62,7 @@ describe('PostgresExtensionSchema', () => {
 describe('extensionEntityKind', () => {
   it('files extensions under the extension entries key and builds the class', () => {
     expect(extensionEntityKind.kind).toBe('extension');
-    expect(extensionEntityKind.construct({ kind: 'extension', name: 'pg_trgm' })).toEqual(
+    expect(extensionEntityKind.construct({ name: 'pg_trgm' })).toEqual(
       new PostgresExtension({ name: 'pg_trgm' }),
     );
   });

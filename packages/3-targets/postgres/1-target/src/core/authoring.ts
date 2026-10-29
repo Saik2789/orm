@@ -851,6 +851,12 @@ interface RlsRoleHandleShape {
   readonly name: string;
 }
 
+interface ExtensionHandleShape {
+  readonly entityKind: 'extension';
+  readonly name: string;
+  readonly namespace?: string;
+}
+
 interface RlsPolicyHandleShape {
   readonly entityKind: 'policy';
   readonly operation: RlsPolicyOperation;
@@ -916,6 +922,7 @@ export function postgresLowerEntityHandles(
     { coordinate: RlsTargetCoordinate; entity: PostgresRlsEnablement }
   >();
   const roles = new Map<string, PostgresRole>();
+  const extensionNamespaces = new Map<string, string>();
   const policies: {
     readonly handle: RlsPolicyHandleShape;
     readonly refs: Readonly<Record<string, ResolvedEntityHandleRef>>;
@@ -968,6 +975,31 @@ export function postgresLowerEntityHandles(
           'policy handles are constructed only by the postgres contract-builder policy*() constructors, which enforce this shape'
         >(handle);
         policies.push({ handle: policyHandle, refs });
+        break;
+      }
+      case 'extension': {
+        const extensionHandle = blindCast<
+          ExtensionHandleShape,
+          'extension handles are constructed only by the postgres contract-builder extension() constructor, which enforces this shape'
+        >(handle);
+        const namespaceId = extensionHandle.namespace ?? input.defaultNamespaceId;
+        const declaredIn = extensionNamespaces.get(extensionHandle.name);
+        if (declaredIn === namespaceId) {
+          throw postgresError(
+            'CONTRACT.NAME_DUPLICATE',
+            `defineContract: extension "${extensionHandle.name}" is declared more than once.`,
+            { meta: { kind: 'extension', name: extensionHandle.name, namespaceId } },
+          );
+        }
+        if (declaredIn !== undefined) {
+          const namespaces = [declaredIn, namespaceId].sort();
+          throw postgresError(
+            'CONTRACT.NAME_DUPLICATE',
+            `defineContract: extension "${extensionHandle.name}" is declared in namespaces ${namespaces.map((id) => `"${id}"`).join(' and ')}; declare it in one namespace only.`,
+            { meta: { kind: 'extension', name: extensionHandle.name, namespaces } },
+          );
+        }
+        extensionNamespaces.set(extensionHandle.name, namespaceId);
         break;
       }
       default:
@@ -1037,6 +1069,14 @@ export function postgresLowerEntityHandles(
   }
   for (const [name, entity] of roles) {
     rows.push({ namespaceId: UNBOUND_NAMESPACE_ID, entityKind: 'role', key: name, entity });
+  }
+  for (const [name, namespaceId] of extensionNamespaces) {
+    rows.push({
+      namespaceId,
+      entityKind: 'extension',
+      key: name,
+      entity: new PostgresExtension({ name }),
+    });
   }
   return rows;
 }
