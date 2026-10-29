@@ -140,6 +140,41 @@ describe('emitContractSpaceArtifacts', () => {
     expect(JSON.parse(headRaw)).toEqual({ hash: HASH_V1, invariants: [] });
   });
 
+  it('leaves a formatted refs/head.json that already holds the same head untouched', async () => {
+    const headPath = join(migrationsDir, 'pgvector', 'refs', 'head.json');
+    const formatted = `{\n  "hash": "${HASH_V1}",\n  "invariants": ["b", "a"]\n}\n`;
+    await mkdir(join(migrationsDir, 'pgvector', 'refs'), { recursive: true });
+    await writeFile(headPath, formatted);
+
+    await emitContractSpaceArtifacts(migrationsDir, 'pgvector', {
+      contract: makeContract(HASH_V1),
+      contractDts: '\n',
+      headRef: { hash: HASH_V1, invariants: ['a', 'b'] },
+    });
+
+    expect(await readFile(headPath, 'utf-8')).toBe(formatted);
+  });
+
+  it.each([
+    ['unparseable', 'not json'],
+    ['without an invariants list', `{"hash":"${HASH_V1}"}`],
+  ])('rewrites a refs/head.json that is %s', async (_label, content) => {
+    const headPath = join(migrationsDir, 'pgvector', 'refs', 'head.json');
+    await mkdir(join(migrationsDir, 'pgvector', 'refs'), { recursive: true });
+    await writeFile(headPath, content);
+
+    await emitContractSpaceArtifacts(migrationsDir, 'pgvector', {
+      contract: makeContract(HASH_V1),
+      contractDts: '\n',
+      headRef: { hash: HASH_V1, invariants: [] },
+    });
+
+    expect(JSON.parse(await readFile(headPath, 'utf-8'))).toEqual({
+      hash: HASH_V1,
+      invariants: [],
+    });
+  });
+
   it('produces byte-identical snapshot output across two writes of the same artifact (idempotency)', async () => {
     const dirA = join(migrationsDir, 'a');
     const dirB = join(migrationsDir, 'b');
