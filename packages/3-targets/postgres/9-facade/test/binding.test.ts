@@ -116,9 +116,9 @@ describe('validatePostgresUrl', () => {
     expect(validatePostgresUrl('postgresql://:5432/mydb')).toBe('postgresql://:5432/mydb');
   });
 
-  it('accepts multi-host connection string', () => {
-    expect(validatePostgresUrl('postgresql://h1:5432,h2:5432/mydb')).toBe(
-      'postgresql://h1:5432,h2:5432/mydb',
+  it('rejects multi-host connection string', () => {
+    expect(() => validatePostgresUrl('postgresql://h1:5432,h2:5432/mydb')).toThrow(
+      'Postgres URL must be a valid URL',
     );
   });
 

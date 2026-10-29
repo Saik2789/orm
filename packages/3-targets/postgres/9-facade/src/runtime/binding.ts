@@ -44,9 +44,6 @@ function normalizePostgresUrlForParsing(url: string): string {
       const atIndex = authority.lastIndexOf('@');
       const userinfo = atIndex !== -1 ? authority.slice(0, atIndex + 1) : '';
       let hostpart = atIndex !== -1 ? authority.slice(atIndex + 1) : authority;
-      if (hostpart.includes(',')) {
-        hostpart = hostpart.split(',')[0] ?? '';
-      }
       if (hostpart === '' || hostpart.startsWith(':')) {
         hostpart = `dummy-host${hostpart}`;
       }

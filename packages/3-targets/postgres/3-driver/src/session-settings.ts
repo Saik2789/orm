@@ -1,6 +1,6 @@
 import type { SessionSettings } from '@internal/framework-components/components';
 import { Client, type ClientBase, type ClientConfig, Pool, type PoolConfig } from 'pg';
-import { parse } from 'pg-connection-string';
+import { type ConnectionOptions, parse } from 'pg-connection-string';
 
 /** The settings pg's `ConnectionParameters` reads from a parsed connection string, except `binary`, which a pg client also applies to every query when it is in the client's own settings. Any other query parameter is not a connection setting, and pg ignores it in a connection string. */
 const CONNECTION_SETTINGS = [
@@ -38,8 +38,28 @@ export function pgConnectionConfig(
   const { connectionString, ...rest } = config;
   const merged: ClientConfig = { ...rest };
   if (connectionString !== undefined) {
-    const parsed = parse(connectionString);
+    let parsed: ConnectionOptions;
+    let hadSyntheticHost = false;
+    try {
+      parsed = parse(connectionString);
+    } catch {
+      const normalizedConnectionString = connectionString.replace(
+        /^([a-zA-Z][a-zA-Z0-9+.-]*:\/\/)([^/?#]*)/,
+        (_match, scheme: string, authority: string) => {
+          const atIndex = authority.lastIndexOf('@');
+          const userinfo = atIndex !== -1 ? authority.slice(0, atIndex + 1) : '';
+          let hostpart = atIndex !== -1 ? authority.slice(atIndex + 1) : authority;
+          if (hostpart === '' || hostpart.startsWith(':')) {
+            hadSyntheticHost = true;
+            hostpart = `dummy-host${hostpart}`;
+          }
+          return `${scheme}${userinfo}${hostpart}`;
+        },
+      );
+      parsed = parse(normalizedConnectionString);
+    }
     for (const setting of CONNECTION_SETTINGS) {
+      if (hadSyntheticHost && setting === 'host') continue;
       const value: unknown = Reflect.get(parsed, setting);
       if (value !== undefined) Object.assign(merged, { [setting]: value });
     }
