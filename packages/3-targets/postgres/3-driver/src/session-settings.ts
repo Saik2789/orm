@@ -59,7 +59,7 @@ export function pgConnectionConfig(
       parsed = parse(normalizedConnectionString);
     }
     for (const setting of CONNECTION_SETTINGS) {
-      if (hadSyntheticHost && setting === 'host') continue;
+      if (hadSyntheticHost && setting === 'host' && parsed.host === 'dummy-host') continue;
       const value: unknown = Reflect.get(parsed, setting);
       if (value !== undefined) Object.assign(merged, { [setting]: value });
     }
