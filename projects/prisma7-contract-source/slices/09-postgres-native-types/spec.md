@@ -6,7 +6,7 @@ A Prisma 7 schema whose columns use `@db.Bit`, `@db.VarBit`, `@db.Xml`, `@db.Oid
 
 Today the reader refuses all five with `PSL.PRISMA7_NATIVE_TYPE_UNSUPPORTED`, so a Prisma 7 project with one such column cannot adopt Prisma 8.
 
-`@db.Citext` was in this slice and is moved out (Will, 2026-10-29). QA showed that an existing Prisma 7 database using citext could not adopt Prisma 8 with the citext pack: `db sign` cannot check that the extension exists, so it cannot record the pack's migration. Citext follows the Postgres extensions slice (`../10-postgres-extensions/spec.md`), which lets a contract declare an extension. Decisions 3 to 5 below are kept for that later PR.
+`@db.Citext` was in this slice and is moved out (Will, 2026-10-29). QA showed that an existing Prisma 7 database using citext could not adopt Prisma 8 with the citext pack: `db sign` cannot check that the extension exists, so it cannot record the pack's migration. Citext follows the Postgres extensions slice, which lets a contract declare an extension. Decisions 3 to 5 below are kept for that later PR.
 
 ## Decisions (settled with Will, 2026-10-27)
 
