@@ -57,11 +57,11 @@ function endSpan(
  * (`@internal/vite-plugin-contract-emit`). New callers must go through this
  * function rather than re-implementing load → emit → publish.
  *
- * After publishing, it writes each composed extension pack's pinned files
+ * Before publishing, it writes each composed extension pack's pinned files
  * under `migrations/<space-id>/`, as `migration plan` does, so a project
- * that never plans a migration can still sign its database. An `outputPath`
- * writes the contract somewhere other than the project, so it writes no
- * pinned files.
+ * that never plans a migration can still sign its database, and returns
+ * each path it wrote there. An `outputPath` writes the contract somewhere
+ * other than the project, so it writes no pinned files.
  *
  * The whole flow (load config → resolve source → emit bytes → atomic publish)
  * is serialized per output JSON path via `queueEmitByOutput`. Concurrent calls
@@ -174,6 +174,22 @@ export async function executeContractEmit(
     }
     endSpan(onProgress, 'emit', 'ok');
 
+    signal.throwIfAborted();
+    const pinnedFiles =
+      outputPath === undefined
+        ? (
+            await unlessAborted(
+              runContractSpaceSeedPhase({
+                migrationsDir: migrationsDirFor(config, cwd),
+                extensions: toExtensionInputs(config.extensions ?? []),
+                signal,
+              }),
+            )
+          ).seeded.flatMap(({ spaceId, writtenPaths }) =>
+            writtenPaths.map((path) => ({ spaceId, path })),
+          )
+        : [];
+
     await unlessAborted(mkdir(dirname(outputJsonPath), { recursive: true }));
     await publishContractArtifactPair({
       outputJsonPath,
@@ -182,13 +198,6 @@ export async function executeContractEmit(
       contractDts: emitResult.contractDts,
       publicationToken: String(process.hrtime.bigint()),
     });
-
-    if (outputPath === undefined) {
-      await runContractSpaceSeedPhase({
-        migrationsDir: migrationsDirFor(config, cwd),
-        extensions: toExtensionInputs(config.extensions ?? []),
-      });
-    }
 
     const validationWarning = validateContractDeps(
       emitResult.contractDts,
@@ -203,6 +212,7 @@ export async function executeContractEmit(
         json: outputJsonPath,
         dts: outputDtsPath,
       },
+      pinnedFiles,
       ...ifDefined('validationWarning', validationWarning),
       ...ifDefined('sourceWarnings', sourceWarnings.length > 0 ? sourceWarnings : undefined),
     };

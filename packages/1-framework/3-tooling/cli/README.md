@@ -93,7 +93,7 @@ Two commands print a document instead of data lines: `contract print` prints the
 | `db migrate --show` | `space`, `name`, `from`, `to` per migration that will run; there is no operation count before the run |
 | `db sign` | `space`, `status`, `storage hash` per space; `status` is the JSON status (`created`, `updated`, `unchanged`, `conflict` or `failed`) |
 | `orm init` | the paths of the files written |
-| `contract emit` | the paths of `contract.json` and `contract.d.ts` |
+| `contract emit` | the paths of `contract.json` and `contract.d.ts`, then each path it wrote under `migrations/` for an extension pack |
 | `contract print` | the PSL, when not written with `--output` |
 | `contract infer` | the path of the PSL file written |
 | `contract format` | the paths of the files formatted |
@@ -189,6 +189,8 @@ It then writes `prisma.config.ts` with `contract: prisma7Schema("<schema path>")
 ### `prisma contract emit` (canonical)
 
 Emit `contract.json` and `contract.d.ts` from `config.contract`.
+
+Without `--output-path`, it first writes each composed extension pack's pinned files under `migrations/<space-id>/`: the pack's contract snapshot, `refs/head.json`, and each migration the pack ships that is not yet on disk. Files that already hold the pack are left alone. The output lists each path it wrote, labelled with the pack's space, and the JSON document carries them as `pinnedFiles`. The head ref is rewritten to the installed pack's head, so a pack installed at an older version moves the head back, and the output shows that rewrite.
 
 **Canonical command:**
 ```bash

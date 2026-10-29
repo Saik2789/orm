@@ -17,6 +17,7 @@ interface EmitDocument {
   readonly profileHash: string;
   readonly outDir: string;
   readonly files: { readonly json: string; readonly dts: string };
+  readonly pinnedFiles: readonly { readonly spaceId: string; readonly path: string }[];
   readonly timings: { readonly total: number };
 }
 
@@ -56,9 +57,24 @@ function emitPresentations(inputs: {
       },
       { kind: 'summary', status: 'ok', text: 'Emitted contract.json and contract.d.ts' },
       hashRows(document),
+      ...(document.pinnedFiles.length === 0
+        ? []
+        : [
+            {
+              kind: 'fields' as const,
+              rows: document.pinnedFiles.map(({ spaceId, path }) => ({
+                label: `space ${spaceId}`,
+                value: relative(cwd, path),
+              })),
+            },
+          ]),
     ],
     stdout: () =>
-      valueLines([relative(cwd, document.files.json), relative(cwd, document.files.dts)]),
+      valueLines([
+        relative(cwd, document.files.json),
+        relative(cwd, document.files.dts),
+        ...document.pinnedFiles.map(({ path }) => relative(cwd, path)),
+      ]),
     json: () => document,
   };
 }
@@ -120,6 +136,7 @@ export function createContractEmitCommand({ executeContractEmit }: ContractEmitC
         profileHash: result.profileHash,
         outDir: dirname(result.files.json),
         files: result.files,
+        pinnedFiles: result.pinnedFiles,
         timings: { total: Date.now() - startedAt },
       };
       ctx.report({

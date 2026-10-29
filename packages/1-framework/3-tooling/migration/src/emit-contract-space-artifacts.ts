@@ -52,22 +52,26 @@ export interface ContractSpaceArtifactInputs {
  *
  * The migrations directory and space subdirectory are created if they
  * do not yet exist (`mkdir { recursive: true }`).
+ *
+ * Returns the snapshot directory and the head ref path when this call wrote them.
  */
 export async function emitContractSpaceArtifacts(
   projectMigrationsDir: string,
   spaceId: string,
   inputs: ContractSpaceArtifactInputs,
-): Promise<void> {
+): Promise<{ readonly writtenPaths: readonly string[] }> {
   assertValidSpaceId(spaceId);
 
   const dir = join(projectMigrationsDir, spaceId);
   const refsDir = spaceRefsDirectory(dir);
   await mkdir(refsDir, { recursive: true });
 
-  await writeContractSnapshot(projectMigrationsDir, inputs.headRef.hash, {
+  const writtenPaths: string[] = [];
+  const snapshot = await writeContractSnapshot(projectMigrationsDir, inputs.headRef.hash, {
     contractJson: inputs.contract,
     contractDts: inputs.contractDts,
   });
+  if (snapshot.written) writtenPaths.push(snapshot.dir);
 
   const sortedInvariants = [...inputs.headRef.invariants].sort();
   const headJson = canonicalizeJson({
@@ -77,7 +81,9 @@ export async function emitContractSpaceArtifacts(
   const headPath = join(refsDir, 'head.json');
   if ((await canonicalHeadOnDisk(headPath)) !== headJson) {
     await writeFile(headPath, `${headJson}\n`);
+    writtenPaths.push(headPath);
   }
+  return { writtenPaths };
 }
 
 async function canonicalHeadOnDisk(headPath: string): Promise<string | undefined> {

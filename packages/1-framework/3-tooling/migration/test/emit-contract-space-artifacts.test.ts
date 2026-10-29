@@ -45,6 +45,35 @@ describe('emitContractSpaceArtifacts', () => {
     expect(snapshotEntries).toEqual(['contract.d.ts', 'contract.json']);
   });
 
+  describe('the paths it reports writing', () => {
+    const emitAt = (hash: string) =>
+      emitContractSpaceArtifacts(migrationsDir, 'cipherstash', {
+        contract: makeContract(hash),
+        contractDts: '\n',
+        headRef: { hash, invariants: [] },
+      });
+    const headPath = () => join(migrationsDir, 'cipherstash', 'refs', 'head.json');
+
+    it('are the snapshot and the head ref on a first write', async () => {
+      expect(await emitAt(HASH_V1)).toEqual({
+        writtenPaths: [contractSnapshotDir(migrationsDir, HASH_V1), headPath()],
+      });
+    });
+
+    it('are none when both already hold the head', async () => {
+      await emitAt(HASH_V1);
+
+      expect(await emitAt(HASH_V1)).toEqual({ writtenPaths: [] });
+    });
+
+    it('are the head ref alone when it moves back to a head already in the store', async () => {
+      await emitAt(HASH_V1);
+      await emitAt(HASH_V2);
+
+      expect(await emitAt(HASH_V1)).toEqual({ writtenPaths: [headPath()] });
+    });
+  });
+
   it('serialises the snapshot contract.json as the canonical-JSON form of the supplied contract', async () => {
     const contract = makeContract(HASH_V1, { z: 1, a: { y: 2, x: 3 } });
     await emitContractSpaceArtifacts(migrationsDir, 'cipherstash', {
