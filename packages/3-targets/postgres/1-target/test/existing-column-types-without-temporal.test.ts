@@ -16,7 +16,7 @@ const constructorNames = [
   ...[
     ...Object.values(prisma7PostgresTypeMap.scalars),
     ...Object.values(prisma7PostgresTypeMap.nativeTypes),
-  ].map(({ constructorPath }) => ({ source: 'prisma7Schema', name: constructorPath.join('.') })),
+  ].map(({ constructorName }) => ({ source: 'prisma7Schema', name: constructorName })),
 ];
 
 function codecIdOf(name: string): string | undefined {

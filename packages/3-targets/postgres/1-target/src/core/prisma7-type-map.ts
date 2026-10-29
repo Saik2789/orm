@@ -34,9 +34,9 @@ import {
 import { postgresCodecDescriptorRegistry } from './registry';
 import { postgresScalarAndNativeTypeConstructors } from './type-constructors';
 
-/** A Prisma 8 constructor call: its path and the values of its arguments. */
+/** A Prisma 8 constructor call: its name and the values of its arguments. */
 export interface ConstructorCall {
-  readonly constructorPath: readonly string[];
+  readonly constructorName: string;
   readonly args: readonly unknown[];
 }
 
@@ -118,7 +118,7 @@ function mappingOf({ dataType, params }: Prisma7ColumnType): ConstructorCall {
       `No constructor marked inferred writes ${dataType} with these parameters.`,
     );
   }
-  return { constructorPath: markedConstructor.path, args };
+  return { constructorName: markedConstructor.path.join('.'), args };
 }
 
 function mappingsOf(
@@ -127,24 +127,8 @@ function mappingsOf(
   return Object.fromEntries(Object.entries(types).map(([name, type]) => [name, mappingOf(type)]));
 }
 
-/**
- * The `@db.*` types of a PostgreSQL extension, which an extension pack provides. The target names the pack and its constructor and does not depend on it; the reader uses the constructor only when the config composes the pack.
- */
-const prisma7PostgresExtensionNativeTypes = {
-  Citext: {
-    constructorPath: ['citext', 'Citext'],
-    args: [],
-    pack: {
-      id: 'citext',
-      importName: 'citext',
-      importPath: '@prisma/orm-postgres-contrib/citext/control',
-    },
-  },
-} as const;
-
 /** {@link prisma7PostgresTypes} as the Prisma 7 reader takes it: each type's constructor call. */
 export const prisma7PostgresTypeMap = {
   scalars: mappingsOf(prisma7PostgresTypes.scalars),
   nativeTypes: mappingsOf(prisma7PostgresTypes.nativeTypes),
-  extensionNativeTypes: prisma7PostgresExtensionNativeTypes,
 };
