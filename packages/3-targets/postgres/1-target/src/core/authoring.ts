@@ -41,6 +41,7 @@ import type {
   LoweredPackEntity,
   ResolvedEntityHandleRef,
   ResolvedPslModelRefs,
+  SqlNameUniqueAcrossNamespacesOutput,
   SqlPslEntityPlacementOutput,
 } from '@internal/sql-contract/entity-handle-lowering-hook';
 import { generatedIdColumnAliases } from '@internal/sql-contract/generated-id-column-aliases';
@@ -66,11 +67,13 @@ import {
 } from './full-text-index-definition';
 import { type FullTextFieldsInput, weightGroupsOf } from './full-text-weight-groups';
 import { postgresCodecTraitsOf } from './postgres-codec-traits';
+import { PostgresExtension } from './postgres-extension';
 import { PostgresNativeEnum } from './postgres-native-enum';
 import { PostgresRlsEnablement, type PostgresRlsEnablementInput } from './postgres-rls-enablement';
 import { PostgresRlsPolicy, type RlsPolicyOperation } from './postgres-rls-policy';
 import { PostgresRole } from './postgres-role';
 import {
+  PostgresExtensionSchema,
   PostgresNativeEnumSchema,
   PostgresRlsEnablementSchema,
   PostgresRlsPolicySchema,
@@ -229,6 +232,10 @@ export interface RlsPolicyExtensionBlock extends ParsedPslExtensionBlock<PolicyB
 }
 
 export function roleSpec() {
+  return structBlock({ parameters: {} });
+}
+
+export function extensionSpec() {
   return structBlock({ parameters: {} });
 }
 
@@ -477,6 +484,13 @@ function lowerRoleFromBlock(
   return new PostgresRole({ name: block.name, namespaceId: UNBOUND_NAMESPACE_ID });
 }
 
+const extensionEntityTypeOutput = {
+  factory: (block: ParsedPslExtensionBlock): PostgresExtension =>
+    new PostgresExtension({ name: block.name }),
+  nameUniqueAcrossNamespaces: true,
+} as const satisfies AuthoringEntityTypeFactoryOutput<ParsedPslExtensionBlock, PostgresExtension> &
+  SqlNameUniqueAcrossNamespacesOutput;
+
 export const postgresAuthoringEntityTypes = {
   role: {
     kind: 'entity',
@@ -506,6 +520,12 @@ export const postgresAuthoringEntityTypes = {
     discriminator: 'native_enum',
     validatorSchema: PostgresNativeEnumSchema,
     output: nativeEnumEntityTypeOutput,
+  },
+  extension: {
+    kind: 'entity',
+    discriminator: 'extension',
+    validatorSchema: PostgresExtensionSchema,
+    output: extensionEntityTypeOutput,
   },
 } as const satisfies AuthoringEntityTypeNamespace;
 
@@ -613,6 +633,15 @@ export const postgresAuthoringPslBlockDescriptors = {
     discriminator: 'role',
     name: { required: true },
     spec: roleSpec,
+  } satisfies PslBlockSpecDescriptor,
+  extension: {
+    kind: 'pslBlock',
+    keyword: 'extension',
+    documentation:
+      'Declares a PostgreSQL extension the database must have installed, in the schema of the enclosing namespace.',
+    discriminator: 'extension',
+    name: { required: true },
+    spec: extensionSpec,
   } satisfies PslBlockSpecDescriptor,
 } as const satisfies AuthoringPslBlockDescriptorNamespace;
 
