@@ -73,6 +73,7 @@ import {
 import {
   buildSqlContractFromDefinition,
   type ColumnNode,
+  composedExtensionPackRefs,
   type FieldNode,
   type ModelNode,
   type TableNode,
@@ -640,6 +641,10 @@ export function interpretPrisma7Documents(
         target: binding.target,
         warnings: undefined,
         createNamespace,
+        ...ifDefined(
+          'extensions',
+          composedExtensionPackRefs(binding.target, input.composedExtensions),
+        ),
         ...(namespaceEntities.size > 0 ? { namespaces: [...namespaceEntities.keys()] } : {}),
         models: modelNodes,
         ...(tables.length > 0 ? { tables } : {}),
