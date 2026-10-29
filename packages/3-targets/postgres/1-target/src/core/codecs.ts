@@ -1112,6 +1112,7 @@ export class PgXmlCodec extends CodecImpl<typeof PG_XML_CODEC_ID, readonly [], s
 }
 
 export class PgXmlDescriptor extends PostgresCodecDescriptor<void> {
+  override readonly jsonType = 'string' as const;
   protected override jsonProjection(expression: ProjectionExpr): ProjectionExpr {
     return expression;
   }
@@ -1160,6 +1161,7 @@ export class PgOidCodec extends CodecImpl<
 }
 
 export class PgOidDescriptor extends PostgresCodecDescriptor<void> {
+  override readonly jsonType = 'number' as const;
   protected override jsonProjection(expression: ProjectionExpr): ProjectionExpr {
     return expression;
   }
@@ -1238,6 +1240,7 @@ export class PgMoneyCodec extends CodecImpl<
  * A `money` column. The application value is decimal text with two fraction digits, as `pg/numeric@1` gives a decimal: `"12.50"`, `"-1234.56"`. PostgreSQL prints money in the session's `lc_monetary`, which the PostgreSQL target sets to C on every connection, so a row and an included row both read `$1,234.56`.
  */
 export class PgMoneyDescriptor extends PostgresCodecDescriptor<void> {
+  override readonly jsonType = 'string' as const;
   protected override jsonProjection(expression: ProjectionExpr): ProjectionExpr {
     return expression;
   }
