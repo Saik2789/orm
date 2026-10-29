@@ -37,6 +37,8 @@ export interface ReadDatasourceExtensionsInput {
   readonly generators: readonly Prisma7SchemaBlock[];
   readonly binding: Prisma7DatabaseExtensions;
   readonly composedExtensions: ReadonlySet<string>;
+  /** The namespace a composed pack's contract declares the extension in; `undefined` when it declares none. */
+  readonly packNamespace: (packId: string, extensionName: string) => string | undefined;
   readonly defaultNamespaceId: string;
   readonly diagnostics: ContractSourceDiagnostic[];
 }
@@ -119,10 +121,30 @@ export function readDatasourceExtensions(
       invalid(`extensions lists ${text(element)}, which is not an extension name`, span);
       continue;
     }
-    const namespaceId = readArguments(name, call, input) ?? input.defaultNamespaceId;
+    const schema = readArguments(name, call, input);
+    const namespaceId = schema ?? input.defaultNamespaceId;
     const pack = Object.hasOwn(binding.packs, name) ? binding.packs[name] : undefined;
     if (pack !== undefined) {
-      if (input.composedExtensions.has(pack.id)) continue;
+      if (input.composedExtensions.has(pack.id)) {
+        const packNamespace = input.packNamespace(pack.id, name);
+        if (packNamespace !== undefined && packNamespace !== namespaceId) {
+          const edit =
+            schema === undefined
+              ? `write ${name}(schema: "${packNamespace}")`
+              : packNamespace === input.defaultNamespaceId
+                ? `remove schema: "${schema}"`
+                : `write schema: "${packNamespace}"`;
+          diagnostics.push(
+            prisma7Diagnostic(
+              'PSL.PRISMA7_EXTENSION_SCHEMA_MISMATCH',
+              `Extension "${name}": the "${pack.id}" extension pack declares it in schema "${packNamespace}", so Prisma 8 expects it there, but this entry puts it in schema "${namespaceId}". Moving it is a database change the pack does not make: move it with ALTER EXTENSION "${name}" SET SCHEMA "${packNamespace}", then ${edit}.`,
+              sourceId,
+              span,
+            ),
+          );
+        }
+        continue;
+      }
       diagnostics.push(
         prisma7Diagnostic(
           'PSL.PRISMA7_EXTENSION_PACK_MISSING',

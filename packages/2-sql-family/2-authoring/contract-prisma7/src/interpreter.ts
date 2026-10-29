@@ -143,6 +143,8 @@ export interface InterpretPrisma7DocumentsInput {
   readonly codecLookup: CodecLookupWithDescriptors;
   readonly dataTypes: DataTypeSupport;
   readonly composedExtensions: readonly string[];
+  /** Each composed pack's contract, by the pack's id. */
+  readonly composedExtensionContracts: ReadonlyMap<string, Contract>;
   readonly defaultNamespaceId: string;
 }
 
@@ -443,6 +445,12 @@ export function interpretPrisma7Documents(
       generators,
       binding: binding.extensions,
       composedExtensions: new Set(input.composedExtensions),
+      packNamespace: (packId, extensionName) =>
+        namespaceDeclaring(
+          input.composedExtensionContracts.get(packId),
+          binding.extensions.entityKind,
+          extensionName,
+        ),
       defaultNamespaceId,
       diagnostics,
     });
@@ -941,6 +949,17 @@ function readEnumDeclaration(
     members.push({ name, value, span });
   }
   return { name: block.name, typeName, namespaceId, members, span: block.span, sourceId };
+}
+
+function namespaceDeclaring(
+  contract: Contract | undefined,
+  entityKind: string,
+  name: string,
+): string | undefined {
+  const namespaces = Object.entries(contract?.storage.namespaces ?? {});
+  return namespaces.find(([, namespace]) =>
+    Object.hasOwn(namespace.entries[entityKind] ?? {}, name),
+  )?.[0];
 }
 
 function entityContext(

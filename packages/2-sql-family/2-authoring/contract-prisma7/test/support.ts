@@ -136,6 +136,7 @@ export function fixtureSchemaText(caseName: string): string {
 export function interpretSchemaTextResult(
   text: string,
   binding: Prisma7TargetBinding = prisma7PostgresBinding,
+  composedPacks: ReadonlyMap<string, Contract> = new Map(),
 ) {
   const context = postgresSourceContext(['schema.prisma']);
   const { document, sources } = parse(text, 'schema.prisma', { grammar: 'prisma-7' });
@@ -156,7 +157,8 @@ export function interpretSchemaTextResult(
     authoringContributions: context.authoringContributions,
     codecLookup: context.codecLookup,
     dataTypes: context.dataTypes,
-    composedExtensions: context.composedExtensions,
+    composedExtensions: [...context.composedExtensions, ...composedPacks.keys()],
+    composedExtensionContracts: new Map([...context.composedExtensionContracts, ...composedPacks]),
   });
 }
 

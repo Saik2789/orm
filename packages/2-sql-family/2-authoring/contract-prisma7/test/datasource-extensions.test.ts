@@ -1,3 +1,4 @@
+import { prisma7PostgresBinding } from '@internal/target-postgres/prisma7-binding';
 import { describe, expect, it } from 'vitest';
 import { interpretSchemaText, interpretSchemaTextResult, serializedNamespaces } from './support';
 
@@ -21,8 +22,22 @@ model User {
 `;
 }
 
-function diagnosticsOf(text: string) {
-  const result = interpretSchemaTextResult(text);
+/** A stand-in pgvector contract declaring `vector` in `schema`, read from a Prisma 7 schema with no pack for it. */
+function pgvectorDeclaringIn(schema: string) {
+  const packless = {
+    ...prisma7PostgresBinding,
+    extensions: { ...prisma7PostgresBinding.extensions, packs: {} },
+  };
+  const result = interpretSchemaTextResult(
+    schemaListing(`[vector(schema: "${schema}")]`),
+    packless,
+  );
+  if (!result.ok) throw new Error(JSON.stringify(result.failure.diagnostics));
+  return new Map([['pgvector', result.value]]);
+}
+
+function diagnosticsOf(text: string, composedPacks = new Map()) {
+  const result = interpretSchemaTextResult(text, prisma7PostgresBinding, composedPacks);
   if (result.ok) throw new Error('The schema interpreted to a contract');
   return result.failure.diagnostics.map(({ code, message }) => ({ code, message }));
 }
@@ -105,5 +120,41 @@ generator other {
           'datasource "db": extensions is pg_trgm, which is not a list, and Prisma 7 refuses it too. List each extension by name, such as extensions = [pg_trgm].',
       },
     ]);
+  });
+
+  describe('an extension a composed pack declares', () => {
+    it('is accepted in the schema the pack declares it in', () => {
+      const result = interpretSchemaTextResult(
+        schemaListing('[vector(schema: "extensions")]'),
+        prisma7PostgresBinding,
+        pgvectorDeclaringIn('extensions'),
+      );
+      expect(result.ok).toBe(true);
+    });
+
+    it('refuses schema: naming another schema', () => {
+      expect(
+        diagnosticsOf(
+          schemaListing('[vector(schema: "extensions")]'),
+          pgvectorDeclaringIn('public'),
+        ),
+      ).toEqual([
+        {
+          code: 'PSL.PRISMA7_EXTENSION_SCHEMA_MISMATCH',
+          message:
+            'Extension "vector": the "pgvector" extension pack declares it in schema "public", so Prisma 8 expects it there, but this entry puts it in schema "extensions". Moving it is a database change the pack does not make: move it with ALTER EXTENSION "vector" SET SCHEMA "public", then remove schema: "extensions".',
+        },
+      ]);
+    });
+
+    it('refuses an entry without schema: when the pack declares it elsewhere', () => {
+      expect(diagnosticsOf(schemaListing('[vector]'), pgvectorDeclaringIn('extensions'))).toEqual([
+        {
+          code: 'PSL.PRISMA7_EXTENSION_SCHEMA_MISMATCH',
+          message:
+            'Extension "vector": the "pgvector" extension pack declares it in schema "extensions", so Prisma 8 expects it there, but this entry puts it in schema "public". Moving it is a database change the pack does not make: move it with ALTER EXTENSION "vector" SET SCHEMA "extensions", then write vector(schema: "extensions").',
+        },
+      ]);
+    });
   });
 });
