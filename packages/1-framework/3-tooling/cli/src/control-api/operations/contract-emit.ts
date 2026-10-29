@@ -59,7 +59,9 @@ function endSpan(
  *
  * After publishing, it writes each composed extension pack's pinned files
  * under `migrations/<space-id>/`, as `migration plan` does, so a project
- * that never plans a migration can still sign its database.
+ * that never plans a migration can still sign its database. An `outputPath`
+ * writes the contract somewhere other than the project, so it writes no
+ * pinned files.
  *
  * The whole flow (load config → resolve source → emit bytes → atomic publish)
  * is serialized per output JSON path via `queueEmitByOutput`. Concurrent calls
@@ -181,10 +183,12 @@ export async function executeContractEmit(
       publicationToken: String(process.hrtime.bigint()),
     });
 
-    await runContractSpaceSeedPhase({
-      migrationsDir: migrationsDirFor(config, cwd),
-      extensions: toExtensionInputs(config.extensions ?? []),
-    });
+    if (outputPath === undefined) {
+      await runContractSpaceSeedPhase({
+        migrationsDir: migrationsDirFor(config, cwd),
+        extensions: toExtensionInputs(config.extensions ?? []),
+      });
+    }
 
     const validationWarning = validateContractDeps(
       emitResult.contractDts,

@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -538,6 +539,30 @@ describe('executeContractEmit', () => {
         await readFile(join(spaceDir, '20260101T0000_create_testpack', 'migration.json'), 'utf-8'),
       ),
     ).toMatchObject({ from: null, to: packHash });
+  });
+
+  it('writes no pack space when the contract goes to an output path of its own', async () => {
+    const config = createSuccessfulConfig(join(tmpDir, 'src/contract.json'));
+    const pack = {
+      kind: 'extension',
+      id: 'testpack',
+      version: '0.0.1',
+      familyId: 'test-family',
+      targetId: 'test-target',
+      contractSpace: {
+        contractJson: { storage: { storageHash: 'a'.repeat(64) } },
+        headRef: { hash: 'a'.repeat(64), invariants: [] },
+        migrations: [],
+      },
+    };
+    mockedEmit.mockResolvedValueOnce(createEmitResult('elsewhere'));
+
+    await executeContractEmitWithMock({
+      ...emitOptions({ ...config, extensions: [pack] } as unknown as typeof config),
+      outputPath: join(tmpDir, 'elsewhere'),
+    });
+
+    expect(existsSync(join(tmpDir, 'migrations'))).toBe(false);
   });
 
   describe('the import root the emitted files are written against', () => {
