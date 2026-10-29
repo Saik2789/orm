@@ -195,6 +195,24 @@ describe('postgres', () => {
     ).not.toThrow();
   });
 
+  it('allows connection strings with blank user and host', () => {
+    expect(() =>
+      postgres({
+        contract,
+        url: 'postgresql:///mydb',
+      }).runtime(),
+    ).not.toThrow();
+  });
+
+  it('allows connection strings with blank host and explicit user', () => {
+    expect(() =>
+      postgres({
+        contract,
+        url: 'postgresql://user@/mydb',
+      }).runtime(),
+    ).not.toThrow();
+  });
+
   it('uses pg pool binding', () => {
     const pool = new Pool({ connectionString: 'postgres://localhost:5432/db' });
     const db = postgres({

@@ -24,6 +24,24 @@ describe('redactDatabaseUrl', () => {
     expect(result.username).toBeUndefined();
   });
 
+  it('extracts database when user and host are omitted', () => {
+    const result = redactDatabaseUrl('postgresql:///app_db');
+
+    expect(result).toEqual({ database: 'app_db' });
+  });
+
+  it('extracts username and database when host is omitted', () => {
+    const result = redactDatabaseUrl('postgresql://user@/app_db');
+
+    expect(result).toEqual({ database: 'app_db', username: 'user' });
+  });
+
+  it('extracts port and database when user and host are omitted', () => {
+    const result = redactDatabaseUrl('postgresql://:5432/app_db');
+
+    expect(result).toEqual({ database: 'app_db', port: '5432' });
+  });
+
   it('returns empty object when parsing fails', () => {
     const result = redactDatabaseUrl('not-a-valid-url');
 
