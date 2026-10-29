@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import postgresAdapter from '@internal/adapter-postgres/control';
 import type { ContractSourceContext } from '@internal/config/config-types';
@@ -39,6 +39,20 @@ export function postgresSourceContext(resolvedInputs: readonly string[]): Contra
     resolvedInputs,
     capabilities: stack.capabilities,
   };
+}
+
+/** The extension pack ids a fixture's `composed-extensions.json` lists; none when the fixture has no such file. */
+export function composedExtensionsOf(caseDirectory: string): readonly string[] {
+  const path = join(caseDirectory, 'composed-extensions.json');
+  return existsSync(path) ? (JSON.parse(readFileSync(path, 'utf8')) as string[]) : [];
+}
+
+/** `context` with the extension packs whose ids are `packIds` composed as well. */
+export function withComposedExtensions(
+  context: ContractSourceContext,
+  packIds: readonly string[],
+): ContractSourceContext {
+  return { ...context, composedExtensions: [...context.composedExtensions, ...packIds] };
 }
 
 /** The Postgres composition with one default function unregistered. */
@@ -103,6 +117,14 @@ export function serializedTable(
   const table = serialized.storage.namespaces[namespaceId]?.entries.table[tableName];
   if (table === undefined) throw new Error(`The contract has no table "${tableName}"`);
   return table;
+}
+
+/** The namespaces of `contract`'s serialized storage, by id. */
+export function serializedNamespaces(
+  contract: Contract<SqlStorage>,
+): Record<string, { readonly entries: Record<string, unknown> }> {
+  return JSON.parse(JSON.stringify(new PostgresContractSerializer().serializeContract(contract)))
+    .storage.namespaces;
 }
 
 /** A fixture's `schema.prisma` text. */
