@@ -115,6 +115,12 @@ function schemaPathOf(fixture: string): string {
   return existsSync(directory) ? directory : join(fixturesDir, fixture, 'schema.prisma');
 }
 
+/** The extension pack ids the fixture's `composed-extensions.json` lists, which the reader takes as composed. */
+function composedExtensionsOf(fixture: string): readonly string[] {
+  const path = join(fixturesDir, fixture, 'composed-extensions.json');
+  return existsSync(path) ? (JSON.parse(readFileSync(path, 'utf8')) as string[]) : [];
+}
+
 async function interpret(fixture: string): Promise<Contract<SqlStorage>> {
   const schemaPath = schemaPathOf(fixture);
   const stack = createControlStack({
@@ -126,7 +132,7 @@ async function interpret(fixture: string): Promise<Contract<SqlStorage>> {
   });
   const loaded = await prisma7Contract(schemaPath, { binding: prisma7PostgresBinding }).source.load(
     {
-      composedExtensions: [],
+      composedExtensions: composedExtensionsOf(fixture),
       defaultNamespaceId: stack.target.defaultNamespaceId,
       composedExtensionContracts: stack.extensionContracts,
       authoringContributions: stack.authoringContributions,
