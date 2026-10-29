@@ -167,7 +167,12 @@ export default function mongo<
         throw mongoError('DRIVER.NOT_CONNECTED', 'Mongo client is closed');
       }
       if (runtimePromise !== undefined) {
-        throw mongoError('DRIVER.ALREADY_CONNECTED', 'Mongo client already connected');
+        if (bindingInput !== undefined) {
+          throw mongoError('DRIVER.ALREADY_CONNECTED', 'Mongo client already connected', {
+            fix: 'Options were passed to a client that is already bound. Call connect() without options, or create a new client for another database.',
+          });
+        }
+        return runtimePromise;
       }
       if (bindingInput !== undefined) {
         binding = resolveMongoBinding(bindingInput);
