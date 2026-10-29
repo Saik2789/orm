@@ -209,7 +209,7 @@ describe('signContractSpaces with invariants the head ref requires', () => {
     });
   }
 
-  it('refuses a space whose marker lacks a required invariant, and writes no marker', async () => {
+  it('refuses a space whose marker lacks a required invariant, and writes no marker for it', async () => {
     const family = familySigning(
       signedEverySpace,
       () => true,
@@ -223,7 +223,7 @@ describe('signContractSpaces with invariants the head ref requires', () => {
       frameworkComponents: [],
     });
 
-    expect(family.calls).not.toContain('signSpaces');
+    expect(family.signed.flat().map((toSign) => toSign.space)).toEqual(['app']);
     expect(result.assertOk().spaces[1]).toEqual({
       space: 'pgvector',
       status: 'missing-invariants',
@@ -245,7 +245,7 @@ describe('signContractSpaces with invariants the head ref requires', () => {
       frameworkComponents: [],
     });
 
-    expect(family.calls).not.toContain('signSpaces');
+    expect(family.signed.flat().map((toSign) => toSign.space)).toEqual(['app']);
     expect(result.assertOk().spaces[1]).toMatchObject({
       space: 'pgvector',
       status: 'missing-invariants',
@@ -300,7 +300,7 @@ describe('signContractSpaces with invariants the head ref requires', () => {
     ]);
   });
 
-  it('writes no marker for any space when one space is refused', async () => {
+  it('signs the other space when one space is refused', async () => {
     const family = familySigning(signedEverySpace);
 
     const result = await signContractSpaces({
@@ -310,16 +310,23 @@ describe('signContractSpaces with invariants the head ref requires', () => {
       frameworkComponents: [],
     });
 
-    expect(family.calls).toEqual(['readAllMarkers', 'introspect']);
+    expect(family.signed).toEqual([
+      [
+        {
+          space: 'app',
+          contract: appContract,
+          expected: { storageHash: 'old-app', profileHash: 'old-app-profile' },
+        },
+      ],
+    ]);
     expect(result.assertOk().spaces).toEqual([
       {
         space: 'app',
-        status: 'withheld',
+        status: 'created',
         contract: {
           storageHash: appContract.storage.storageHash,
           profileHash: appContract.profileHash,
         },
-        refusedSpaces: ['pgvector'],
       },
       {
         space: 'pgvector',
@@ -333,7 +340,7 @@ describe('signContractSpaces with invariants the head ref requires', () => {
     ]);
   });
 
-  it('still reports a space that fails verification as failed when another space is refused', async () => {
+  it('reports a space that fails verification as failed beside a refused space', async () => {
     const family = familySigning(signedEverySpace, (contract) => contract !== appContract);
 
     const result = await signContractSpaces({

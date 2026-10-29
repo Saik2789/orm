@@ -7,6 +7,7 @@ import {
   envelopeOf,
   HASH_A,
   HASH_EXT,
+  HASH_PREVIOUS,
   harness,
   mocks,
   ormConfig,
@@ -14,6 +15,7 @@ import {
   projectDir,
   refHashOf,
   resetMocks,
+  signedSpace,
 } from './db-sign-fixtures';
 
 beforeEach(resetMocks);
@@ -28,19 +30,14 @@ const refused: DbSignSpaceOutcome = {
   missingInvariants: [INSTALL_VECTOR],
 };
 
-const withheld: DbSignSpaceOutcome = {
-  space: 'app',
-  status: 'withheld',
-  contract: { storageHash: HASH_A, profileHash: PROFILE_HASH },
-  refusedSpaces: ['pgvector'],
-};
+const signed = signedSpace('app', HASH_A);
 
 describe('db sign refusing a space whose marker lacks a required invariant', () => {
   beforeEach(() => {
-    mocks.dbSign.mockResolvedValue(ok({ spaces: [withheld, refused] }));
+    mocks.dbSign.mockResolvedValue(ok({ spaces: [signed, refused] }));
   });
 
-  it('completes at exit 4, signs nothing and advances no ref', async () => {
+  it('completes at exit 4, signs the other space and advances only its ref', async () => {
     const dir = await projectDir();
 
     const run = await harness(ormConfig()).run(['db', 'sign', '--json'], { cwd: dir });
@@ -49,11 +46,11 @@ describe('db sign refusing a space whose marker lacks a required invariant', () 
     expect(envelopeOf(run)).toMatchObject({ ok: true, exitCode: 4 });
     expect(run.presented?.data).toEqual({
       ok: false,
-      summary: 'Space "pgvector" requires invariants its marker does not record; signed nothing',
-      spaces: [withheld, refused],
-      advancedRefs: [],
+      summary: 'Space "pgvector" requires invariants its marker does not record; signed "app"',
+      spaces: [signed, refused],
+      advancedRefs: [{ space: 'app', name: 'db', hash: HASH_A }],
     });
-    expect(await refHashOf(dir, 'db')).toBeUndefined();
+    expect(await refHashOf(dir, 'db', 'pgvector')).toBeUndefined();
   });
 
   it('names the space and each missing invariant, and says to run db migrate', async () => {
@@ -66,7 +63,7 @@ describe('db sign refusing a space whose marker lacks a required invariant', () 
         code: 'MIGRATION.SIGN_INVARIANTS_MISSING',
         severity: 'error',
         summary: 'Space "pgvector" requires invariants its marker does not record',
-        why: `The head ref of space "pgvector" requires the invariant "${INSTALL_VECTOR}", which the database marker does not record. An invariant records that a migration ran, and db sign never runs migrations, so it signed no space.`,
+        why: `The head ref of space "pgvector" requires the invariant "${INSTALL_VECTOR}", which the database marker does not record. An invariant records that a migration ran, and db sign never runs migrations, so it did not sign this space.`,
         nextActions: [
           {
             kind: 'run-command',
@@ -84,9 +81,7 @@ describe('db sign refusing a space whose marker lacks a required invariant', () 
 
     const run = await harness(ormConfig()).run(['db', 'sign'], { cwd: dir });
 
-    expect(run.stdout).toBe(
-      `app\twithheld\t${HASH_A}\npgvector\tmissing-invariants\t${HASH_EXT}\n`,
-    );
+    expect(run.stdout).toBe(`app\tupdated\t${HASH_A}\npgvector\tmissing-invariants\t${HASH_EXT}\n`);
   });
 
   it('draws the missing invariants under the refused space', async () => {
@@ -101,8 +96,14 @@ describe('db sign refusing a space whose marker lacks a required invariant', () 
       kind: 'tree',
       roots: [
         {
-          label: 'app: not signed, because db sign refused space "pgvector"',
-          status: 'error',
+          label: [
+            { text: 'app: signed ' },
+            { text: HASH_A, tone: 'identifier' },
+            { text: ' (was ', tone: 'muted' },
+            { text: HASH_PREVIOUS, tone: 'identifier' },
+            { text: ')', tone: 'muted' },
+          ],
+          status: 'ok',
         },
         {
           label:

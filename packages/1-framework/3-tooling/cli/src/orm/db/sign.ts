@@ -170,11 +170,6 @@ function spaceNode(outcome: DbSignSpaceOutcome): TreeNode {
           status: 'error',
         })),
       };
-    case 'withheld':
-      return {
-        label: `${outcome.space}: not signed, because db sign refused ${outcome.refusedSpaces.length === 1 ? 'space' : 'spaces'} ${outcome.refusedSpaces.map((space) => `"${space}"`).join(', ')}`,
-        status: 'error',
-      };
     case 'conflict':
       return {
         label: `${outcome.space}: not signed, its marker changed after the schema was verified`,
@@ -287,7 +282,7 @@ function missingInvariantsDiagnostic(
     code: 'MIGRATION.SIGN_INVARIANTS_MISSING',
     severity: 'error',
     summary: `Space "${outcome.space}" requires invariants its marker does not record`,
-    why: `The head ref of space "${outcome.space}" requires ${required}. An invariant records that a migration ran, and db sign never runs migrations, so it signed no space.`,
+    why: `The head ref of space "${outcome.space}" requires ${required}. An invariant records that a migration ran, and db sign never runs migrations, so it did not sign this space.`,
     nextActions: [
       {
         kind: 'run-command',
@@ -449,8 +444,8 @@ export function createDbSignCommand(
         'signed the database but could not write every ref,\n' +
         '4 = schema verification failed for a space,\n' +
         'or its marker changed while db sign ran; its signature was not written.\n' +
-        'Also 4 when a space requires invariants its marker does not record; then\n' +
-        'no signature is written for any space, and db migrate provides them.',
+        'Also 4 when a space requires invariants its marker does not record;\n' +
+        'its signature is not written, and db migrate provides them.',
       examples: [
         'db sign',
         'db sign --db $DATABASE_URL',
@@ -481,7 +476,7 @@ export function createDbSignCommand(
     },
     needs: { config: ormConfigSection },
     exitCodes: {
-      4: 'schema verification failed for a space, or its marker changed while db sign ran, and its signature was not written; or a space requires invariants its marker does not record, and no signature was written',
+      4: 'schema verification failed for a space, its marker changed while db sign ran, or it requires invariants its marker does not record; its signature was not written',
     },
     handler: async (args, ctx) => {
       const positionalContract = args.positionals.contract;

@@ -55,22 +55,10 @@ export interface DbSignSpaceMissingInvariants {
   readonly missingInvariants: readonly string[];
 }
 
-/** A space that verified but was not signed, because `db sign` refused the spaces in `refusedSpaces` and then writes no marker at all. */
-export interface DbSignSpaceWithheld {
-  readonly space: string;
-  readonly status: 'withheld';
-  readonly contract: MarkerHashes;
-  readonly refusedSpaces: readonly string[];
-}
-
 /**
- * What `db sign` did with one contract space: what the family's signing did to its marker ({@link SpaceSignature}), `failed` when the live schema does not satisfy the space's contract, `missing-invariants` when its marker lacks invariants its head ref requires, or `withheld` when another space was refused that way.
+ * What `db sign` did with one contract space: what the family's signing did to its marker ({@link SpaceSignature}), `failed` when the live schema does not satisfy the space's contract, or `missing-invariants` when its marker lacks invariants its head ref requires.
  */
-export type DbSignSpaceOutcome =
-  | SpaceSignature
-  | DbSignSpaceFailure
-  | DbSignSpaceMissingInvariants
-  | DbSignSpaceWithheld;
+export type DbSignSpaceOutcome = SpaceSignature | DbSignSpaceFailure | DbSignSpaceMissingInvariants;
 
 export interface ExecuteDbSignSuccess {
   /** The app space first, then each extension space in declaration order. */
@@ -136,7 +124,7 @@ function contractHashes(space: AggregateContractSpace): MarkerHashes {
 /**
  * Reads every space's marker, verifies every contract space of the aggregate against the live schema without strict mode, then writes the marker of every space that verified in one call to the family, each only while it still holds the hashes read here. A space that fails verification is reported with its schema result and keeps its marker; a space whose marker another process wrote in the meantime is reported as a conflict and keeps that marker. The family gets the spaces in the order `migrate` applies them ({@link spacesInApplyOrder}).
  *
- * A space whose head ref requires invariants its marker does not record is refused, since only running the migrations that provide them can; when any space is refused, no marker is written for any space.
+ * A space whose head ref requires invariants its marker does not record is refused and keeps its marker, since only running the migrations that provide them can record them.
  */
 export async function signContractSpaces<TFamilyId extends string, TTargetId extends string>(
   options: SignContractSpacesOptions<TFamilyId, TTargetId>,
@@ -191,34 +179,8 @@ export async function signContractSpaces<TFamilyId extends string, TTargetId ext
       )
       .filter(([, missing]) => missing.length > 0),
   );
-  if (missingBySpace.size > 0) {
-    const refusedSpaces = [...missingBySpace.keys()];
-    return ok({
-      spaces: allSpaces.map((space): DbSignSpaceOutcome => {
-        const missing = missingBySpace.get(space.spaceId);
-        if (missing !== undefined) {
-          return {
-            space: space.spaceId,
-            status: 'missing-invariants',
-            contract: contractHashes(space),
-            missingInvariants: missing,
-          };
-        }
-        const schema = schemaOf(space);
-        return schema.ok
-          ? {
-              space: space.spaceId,
-              status: 'withheld',
-              contract: contractHashes(space),
-              refusedSpaces,
-            }
-          : { space: space.spaceId, status: 'failed', contract: contractHashes(space), schema };
-      }),
-    });
-  }
-
   const toSign: readonly SpaceToSign[] = spacesInApplyOrder(aggregate)
-    .filter((space) => schemaOf(space).ok)
+    .filter((space) => schemaOf(space).ok && !missingBySpace.has(space.spaceId))
     .map((space) => ({
       space: space.spaceId,
       contract: space.contract(),
@@ -231,14 +193,23 @@ export async function signContractSpaces<TFamilyId extends string, TTargetId ext
   const signatureOf = new Map(signatures.map((signature) => [signature.space, signature]));
 
   return ok({
-    spaces: allSpaces.map(
-      (space): DbSignSpaceOutcome =>
-        signatureOf.get(space.spaceId) ?? {
-          space: space.spaceId,
-          status: 'failed',
-          contract: contractHashes(space),
-          schema: schemaOf(space),
-        },
-    ),
+    spaces: allSpaces.map((space): DbSignSpaceOutcome => {
+      const signature = signatureOf.get(space.spaceId);
+      if (signature !== undefined) return signature;
+      const missing = missingBySpace.get(space.spaceId);
+      return missing === undefined
+        ? {
+            space: space.spaceId,
+            status: 'failed',
+            contract: contractHashes(space),
+            schema: schemaOf(space),
+          }
+        : {
+            space: space.spaceId,
+            status: 'missing-invariants',
+            contract: contractHashes(space),
+            missingInvariants: missing,
+          };
+    }),
   });
 }
