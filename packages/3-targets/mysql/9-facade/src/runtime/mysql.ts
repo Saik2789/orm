@@ -351,9 +351,15 @@ export default function mysql<
       }
 
       if (driverConnected || connectPromise) {
-        throw mysqlClientError('DRIVER.ALREADY_CONNECTED', 'MySQL client already connected', {
-          meta: { extension: 'mysql' },
-        });
+        if (bindingInput !== undefined) {
+          throw mysqlClientError('DRIVER.ALREADY_CONNECTED', 'MySQL client already connected', {
+            fix: 'Options were passed to a client that is already bound. Call connect() without options, or create a new client for another database.',
+            meta: { extension: 'mysql' },
+          });
+        }
+        const runtime = getRuntime();
+        await connectPromise;
+        return runtime;
       }
 
       backgroundConnectError = undefined;
