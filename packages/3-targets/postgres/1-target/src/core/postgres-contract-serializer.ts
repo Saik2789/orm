@@ -31,6 +31,7 @@ import {
   rlsEnablementEntityKind,
   roleEntityKind,
 } from './entity-kinds';
+import { postgresError } from './errors';
 import { assertFullTextIndexes } from './full-text-index-definition';
 import { postgresCodecTraitsOf } from './postgres-codec-traits';
 import { PostgresSchema } from './postgres-schema';
@@ -172,6 +173,12 @@ export class PostgresContractSerializer extends SqlContractSerializerBase<Contra
     return schema;
   }
 
+  protected override hydrateSqlStorage(validated: Contract<SqlStorage>): Contract<SqlStorage> {
+    const hydrated = super.hydrateSqlStorage(validated);
+    assertExtensionsInOneNamespace(hydrated.storage);
+    return hydrated;
+  }
+
   override serializeContract(contract: Contract<SqlStorage>): JsonObject {
     const { storage, ...rest } = contract;
     const namespacesJson: Record<string, JsonObject> = {};
@@ -204,5 +211,27 @@ export class PostgresContractSerializer extends SqlContractSerializerBase<Contra
       ...rest,
       storage: storageOut,
     });
+  }
+}
+
+function assertExtensionsInOneNamespace(storage: SqlStorage): void {
+  const namespacesByExtension = new Map<string, string[]>();
+  for (const namespace of Object.values(storage.namespaces)) {
+    if (!(namespace instanceof PostgresSchema)) continue;
+    for (const name of Object.keys(namespace.extension)) {
+      namespacesByExtension.set(name, [...(namespacesByExtension.get(name) ?? []), namespace.id]);
+    }
+  }
+  for (const [name, namespaceIds] of namespacesByExtension) {
+    if (namespaceIds.length < 2) continue;
+    const namespaces = [...namespaceIds].sort();
+    throw postgresError(
+      'CONTRACT.NAME_DUPLICATE',
+      `Extension "${name}" is declared in namespaces ${namespaces.map((id) => `"${id}"`).join(' and ')}. An extension's name is unique in the database, so a contract declares it in one namespace only.`,
+      {
+        fix: 'Re-emit the contract from its source, which refuses one extension declared in two namespaces.',
+        meta: { kind: 'extension', name, namespaces },
+      },
+    );
   }
 }

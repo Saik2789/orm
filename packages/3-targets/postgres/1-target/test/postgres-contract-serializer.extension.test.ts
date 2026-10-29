@@ -50,6 +50,30 @@ describe('extension entries in the Postgres contract serializer', () => {
     ).toEqual({ postgis: { kind: 'extension', name: 'postgis' } });
   });
 
+  it('refuses one extension declared in two namespaces', () => {
+    const contract = createSqlContract({
+      storage: {
+        namespaces: {
+          public: {
+            id: 'public',
+            entries: { table: {}, extension: { postgis: { kind: 'extension', name: 'postgis' } } },
+          },
+          extensions: {
+            id: 'extensions',
+            entries: { table: {}, extension: { postgis: { kind: 'extension', name: 'postgis' } } },
+          },
+        },
+      },
+    });
+    expect(() => new PostgresContractSerializer().deserializeContract(contract)).toThrow(
+      expect.objectContaining({
+        code: 'CONTRACT.NAME_DUPLICATE',
+        message:
+          'Extension "postgis" is declared in namespaces "extensions" and "public". An extension\'s name is unique in the database, so a contract declares it in one namespace only.',
+      }),
+    );
+  });
+
   it('refuses an extension entry carrying a version', () => {
     expect(() =>
       new PostgresContractSerializer().deserializeContract(
