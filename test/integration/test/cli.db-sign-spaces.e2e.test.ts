@@ -116,7 +116,28 @@ async function postgresMarkers(connectionString: string): Promise<Record<string,
   });
 }
 
-/** Makes the database look signed before the upgrade: markers hold hashes the project no longer has. */
+/**
+ * The first `db sign` of a fresh database signs the app space and refuses the test extension's space: its head ref requires an invariant that only running its migration records.
+ */
+function expectFirstSignRefusesTestSpace(
+  first: Awaited<ReturnType<typeof runOnEngine>>,
+  hashes: { readonly appHash: string; readonly extHash: string },
+): void {
+  expect(first.exitCode, `first sign: ${first.stderr}`).toBe(4);
+  expect(signedSpaces(first)).toEqual([
+    { space: 'app', status: 'created', storageHash: hashes.appHash, previous: undefined },
+    {
+      space: TEST_SPACE_ID,
+      status: 'missing-invariants',
+      storageHash: hashes.extHash,
+      previous: undefined,
+    },
+  ]);
+}
+
+/**
+ * Makes the database look signed before the upgrade: markers hold hashes the project no longer has, and the extension space's marker records the invariant its migration provided, as it would after that migration ran.
+ */
 async function ageMarkersOnPostgres(
   connectionString: string,
   extensionSpace: { readonly id: string; readonly invariant: string },
@@ -126,7 +147,9 @@ async function ageMarkersOnPostgres(
       OLD_APP_HASH,
     ]);
     await client.query(
-      'UPDATE prisma_contract.marker SET core_hash = $1, invariants = $2::text[] WHERE space = $3',
+      `INSERT INTO prisma_contract.marker (space, core_hash, profile_hash, invariants)
+       VALUES ($3, $1, $1, $2::text[])
+       ON CONFLICT (space) DO UPDATE SET core_hash = $1, invariants = $2::text[]`,
       [OLD_EXT_HASH, [extensionSpace.invariant], extensionSpace.id],
     );
   });
@@ -148,6 +171,22 @@ async function createPostgresTables(connectionString: string): Promise<void> {
     );
     await client.query('CREATE TABLE test_box (x integer NOT NULL, y integer NOT NULL)');
   });
+}
+
+/** {@link ageMarkersOnPostgres} on SQLite. */
+function ageMarkersOnSqlite(db: DatabaseSync): void {
+  db.prepare(`UPDATE _prisma_marker SET core_hash = ? WHERE space = 'app'`).run(OLD_APP_HASH);
+  db.prepare(
+    `INSERT INTO _prisma_marker (space, core_hash, profile_hash, updated_at, invariants)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT (space) DO UPDATE SET core_hash = excluded.core_hash, invariants = excluded.invariants`,
+  ).run(
+    TEST_SPACE_ID,
+    OLD_EXT_HASH,
+    OLD_EXT_HASH,
+    new Date(0).toISOString(),
+    JSON.stringify([TEST_BASELINE_INVARIANT_ID]),
+  );
 }
 
 withTempDir(({ createTempDir }) => {
@@ -209,7 +248,7 @@ withTempDir(({ createTempDir }) => {
           const { appHash, extHash } = await prepareProject(project, testContractSpaceExtension);
           await createPostgresTables(connectionString);
           const first = await runOnEngine(project, ['db', 'sign', '--json']);
-          expect(first.exitCode, `first sign: ${first.stderr}`).toBe(0);
+          expectFirstSignRefusesTestSpace(first, { appHash, extHash });
           await ageMarkersOnPostgres(connectionString, {
             id: TEST_SPACE_ID,
             invariant: TEST_BASELINE_INVARIANT_ID,
@@ -270,15 +309,8 @@ withTempDir(({ createTempDir }) => {
           db.exec('CREATE TABLE "user" (id integer NOT NULL PRIMARY KEY, email text NOT NULL)');
           db.exec('CREATE TABLE test_box (x integer NOT NULL, y integer NOT NULL)');
           const first = await runOnEngine(project, ['db', 'sign', '--json']);
-          expect(first.exitCode, `first sign: ${first.stderr}`).toBe(0);
-          db.prepare(`UPDATE _prisma_marker SET core_hash = ? WHERE space = 'app'`).run(
-            OLD_APP_HASH,
-          );
-          db.prepare('UPDATE _prisma_marker SET core_hash = ?, invariants = ? WHERE space = ?').run(
-            OLD_EXT_HASH,
-            JSON.stringify([TEST_BASELINE_INVARIANT_ID]),
-            TEST_SPACE_ID,
-          );
+          expectFirstSignRefusesTestSpace(first, { appHash, extHash });
+          ageMarkersOnSqlite(db);
 
           const sign = await runOnEngine(project, ['db', 'sign', '--json']);
 
@@ -350,7 +382,7 @@ withTempDir(({ createTempDir }) => {
           const { appHash, extHash } = await prepareProject(project, testContractSpaceExtension);
           await createPostgresTables(connectionString);
           const first = await runOnEngine(project, ['db', 'sign', '--json']);
-          expect(first.exitCode, `first sign: ${first.stderr}`).toBe(0);
+          expectFirstSignRefusesTestSpace(first, { appHash, extHash });
           await ageMarkersOnPostgres(connectionString, {
             id: TEST_SPACE_ID,
             invariant: TEST_BASELINE_INVARIANT_ID,
@@ -408,15 +440,8 @@ withTempDir(({ createTempDir }) => {
           db.exec('CREATE TABLE "user" (id integer NOT NULL PRIMARY KEY, email text NOT NULL)');
           db.exec('CREATE TABLE test_box (x integer NOT NULL, y integer NOT NULL)');
           const first = await runOnEngine(project, ['db', 'sign', '--json']);
-          expect(first.exitCode, `first sign: ${first.stderr}`).toBe(0);
-          db.prepare(`UPDATE _prisma_marker SET core_hash = ? WHERE space = 'app'`).run(
-            OLD_APP_HASH,
-          );
-          db.prepare('UPDATE _prisma_marker SET core_hash = ?, invariants = ? WHERE space = ?').run(
-            OLD_EXT_HASH,
-            JSON.stringify([TEST_BASELINE_INVARIANT_ID]),
-            TEST_SPACE_ID,
-          );
+          expectFirstSignRefusesTestSpace(first, { appHash, extHash });
+          ageMarkersOnSqlite(db);
           writeRace(project, `UPDATE _prisma_marker SET core_hash = ? WHERE space = 'app'`);
 
           const sign = await runOnEngine(project, ['db', 'sign', '--json']);
