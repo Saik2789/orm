@@ -355,4 +355,46 @@ describe('signContractSpaces with invariants the head ref requires', () => {
       'missing-invariants',
     ]);
   });
+
+  it('reports both the missing invariants and the failed verification of one space', async () => {
+    const family = familySigning(signedEverySpace, (contract) => contract !== extContract);
+
+    const result = await signContractSpaces({
+      driver,
+      familyInstance: family.familyInstance,
+      aggregate: aggregateWith(space('pgvector', extContract, [INSTALL_VECTOR])),
+      frameworkComponents: [],
+    });
+
+    expect(result.assertOk().spaces[1]).toEqual({
+      space: 'pgvector',
+      status: 'missing-invariants',
+      contract: {
+        storageHash: extContract.storage.storageHash,
+        profileHash: extContract.profileHash,
+      },
+      missingInvariants: [INSTALL_VECTOR],
+      schema: {
+        ok: false,
+        summary: 'ok',
+        contract: { storageHash: 'x' },
+        target: { expected: 'postgres' },
+        schema: { issues: [] },
+        timings: { total: 0 },
+      },
+    });
+  });
+
+  it('carries no schema result for a refused space that verifies', async () => {
+    const family = familySigning(signedEverySpace);
+
+    const result = await signContractSpaces({
+      driver,
+      familyInstance: family.familyInstance,
+      aggregate: aggregateWith(space('pgvector', extContract, [INSTALL_VECTOR])),
+      frameworkComponents: [],
+    });
+
+    expect(result.assertOk().spaces[1]).not.toHaveProperty('schema');
+  });
 });

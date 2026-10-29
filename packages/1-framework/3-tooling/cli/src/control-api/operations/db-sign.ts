@@ -47,12 +47,13 @@ export interface DbSignSpaceFailure {
   readonly schema: VerifyDatabaseSchemaResult;
 }
 
-/** A space `db sign` refused because its head ref requires invariants its marker does not record; only `db migrate` can provide them. */
+/** A space `db sign` refused because its head ref requires invariants its marker does not record; only `db migrate` can provide them. `schema` is present when the live schema does not satisfy the space's contract either. */
 export interface DbSignSpaceMissingInvariants {
   readonly space: string;
   readonly status: 'missing-invariants';
   readonly contract: MarkerHashes;
   readonly missingInvariants: readonly string[];
+  readonly schema?: VerifyDatabaseSchemaResult;
 }
 
 /**
@@ -197,18 +198,15 @@ export async function signContractSpaces<TFamilyId extends string, TTargetId ext
       const signature = signatureOf.get(space.spaceId);
       if (signature !== undefined) return signature;
       const missing = missingBySpace.get(space.spaceId);
+      const schema = schemaOf(space);
       return missing === undefined
-        ? {
-            space: space.spaceId,
-            status: 'failed',
-            contract: contractHashes(space),
-            schema: schemaOf(space),
-          }
+        ? { space: space.spaceId, status: 'failed', contract: contractHashes(space), schema }
         : {
             space: space.spaceId,
             status: 'missing-invariants',
             contract: contractHashes(space),
             missingInvariants: missing,
+            ...(schema.ok ? {} : { schema }),
           };
     }),
   });

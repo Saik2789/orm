@@ -1,14 +1,17 @@
 import { ok } from '@internal/utils/result';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { DbSignSpaceOutcome } from '../../src/control-api/operations/db-sign';
+import { issueNodes } from '../../src/orm/db/verification';
 import {
   cleanupProjectDirs,
+  DRIFTED,
   diagnosticsOf,
   envelopeOf,
   HASH_A,
   HASH_EXT,
   HASH_PREVIOUS,
   harness,
+  MISSING_COLUMN,
   mocks,
   ormConfig,
   PROFILE_HASH,
@@ -121,5 +124,54 @@ describe('db sign refusing a space whose marker lacks a required invariant', () 
     const run = await harness(ormConfig()).run(['db', 'sign', '--help'], { cwd: dir });
 
     expect(`${run.stdout}${run.stderr}`).toContain('invariants its marker does not record');
+  });
+});
+
+describe('db sign refusing a space that also fails verification', () => {
+  const refusedAndDrifted: DbSignSpaceOutcome = { ...refused, schema: DRIFTED };
+
+  beforeEach(() => {
+    mocks.dbSign.mockResolvedValue(ok({ spaces: [signed, refusedAndDrifted] }));
+  });
+
+  it('reports the missing invariants and the schema verdict', async () => {
+    const dir = await projectDir();
+
+    const run = await harness(ormConfig()).run(['db', 'sign', '--json'], { cwd: dir });
+
+    expect(run.exitCode).toBe(4);
+    expect(diagnosticsOf(run).map((diagnostic) => diagnostic.code)).toEqual([
+      'MIGRATION.SIGN_INVARIANTS_MISSING',
+      'CONTRACT.SCHEMA_VERIFICATION_FAILED',
+    ]);
+    expect(run.presented?.data).toMatchObject({
+      summary:
+        'Space "pgvector" requires invariants its marker does not record; Database schema does not satisfy contract for space "pgvector"; signed "app"',
+    });
+  });
+
+  it('draws the schema issues under the missing invariants', async () => {
+    const dir = await projectDir();
+
+    const run = await harness(ormConfig()).run(['db', 'sign', '--no-advance-ref'], {
+      cwd: dir,
+      isTty: { stdout: true },
+    });
+
+    expect(run.presented?.presentation.human[1]).toMatchObject({
+      kind: 'tree',
+      roots: [
+        { status: 'ok' },
+        {
+          label:
+            'pgvector: not signed, its marker does not record invariants its head ref requires, and the schema does not satisfy its contract',
+          status: 'error',
+          children: [
+            { label: `missing invariant: ${INSTALL_VECTOR}`, status: 'error' },
+            ...issueNodes([MISSING_COLUMN], 'error'),
+          ],
+        },
+      ],
+    });
   });
 });

@@ -1,7 +1,11 @@
 import type { PrismaNextConfig } from '@internal/config/config-types';
 import { ormConfigSection } from '@internal/config-loader';
 import type { Contract } from '@internal/contract/types';
-import { APP_SPACE_ID, createControlStack } from '@internal/framework-components/control';
+import {
+  APP_SPACE_ID,
+  createControlStack,
+  type VerifyDatabaseSchemaResult,
+} from '@internal/framework-components/control';
 import { MigrationToolsError } from '@internal/migration-tools/errors';
 import { readRef, writeRef } from '@internal/migration-tools/refs';
 import { spaceMigrationDirectory, spaceRefsDirectory } from '@internal/migration-tools/spaces';
@@ -163,12 +167,16 @@ function spaceNode(outcome: DbSignSpaceOutcome): TreeNode {
       };
     case 'missing-invariants':
       return {
-        label: `${outcome.space}: not signed, its marker does not record invariants its head ref requires`,
+        label: `${outcome.space}: not signed, its marker does not record invariants its head ref requires${outcome.schema === undefined ? '' : ', and the schema does not satisfy its contract'}`,
         status: 'error',
-        children: outcome.missingInvariants.map((id) => ({
-          label: `missing invariant: ${id}`,
-          status: 'error',
-        })),
+        children: [
+          ...outcome.missingInvariants.map(
+            (id): TreeNode => ({ label: `missing invariant: ${id}`, status: 'error' }),
+          ),
+          ...(outcome.schema === undefined
+            ? []
+            : issueNodes(outcome.schema.schema.issues, 'error')),
+        ],
       };
     case 'conflict':
       return {
@@ -198,8 +206,15 @@ function quotedList(spaces: readonly DbSignSpaceOutcome[]): string {
   return spaces.map((outcome) => `"${outcome.space}"`).join(', ');
 }
 
+function failsVerification(outcome: DbSignSpaceOutcome): boolean {
+  return (
+    outcome.status === 'failed' ||
+    (outcome.status === 'missing-invariants' && outcome.schema !== undefined)
+  );
+}
+
 function signSummary(spaces: readonly DbSignSpaceOutcome[]): string {
-  const failed = spaces.filter((outcome) => outcome.status === 'failed');
+  const failed = spaces.filter(failsVerification);
   const conflicts = spaces.filter((outcome) => outcome.status === 'conflict');
   const refused = spaces.filter((outcome) => outcome.status === 'missing-invariants');
   if (failed.length === 0 && conflicts.length === 0 && refused.length === 0) {
@@ -617,6 +632,34 @@ export function createDbSignCommand(
             }
           }
         }
+        const migrate = cliCommand(cliInvocation(ctx, args.flags.db), 'db migrate');
+        const verdictDiagnostic = (space: string, schema: VerifyDatabaseSchemaResult) =>
+          schemaVerdictDiagnostic({
+            result: schema,
+            space,
+            nextActions: schemaDriftNextActions({
+              verb: 'sign',
+              contractRef,
+              issues: schema.schema.issues,
+            }),
+          });
+        const diagnostics: Diagnostic[] = spaces.flatMap((outcome) => {
+          switch (outcome.status) {
+            case 'failed':
+              return [verdictDiagnostic(outcome.space, outcome.schema)];
+            case 'conflict':
+              return [markerConflictDiagnostic(outcome, rerun)];
+            case 'missing-invariants':
+              return [
+                missingInvariantsDiagnostic(outcome, migrate),
+                ...(outcome.schema === undefined
+                  ? []
+                  : [verdictDiagnostic(outcome.space, outcome.schema)]),
+              ];
+            default:
+              return [];
+          }
+        });
         if (unwritten.length > 0) {
           return notOk(
             normalizeError(
@@ -628,6 +671,11 @@ export function createDbSignCommand(
                 conflictSpaces: spaces
                   .filter((outcome) => outcome.status === 'conflict')
                   .map((outcome) => outcome.space),
+                refusedSpaces: spaces.flatMap((outcome) =>
+                  outcome.status === 'missing-invariants'
+                    ? [{ space: outcome.space, missingInvariants: outcome.missingInvariants }]
+                    : [],
+                ),
                 unwrittenRefs: unwritten.map(({ space, name, hash, reason }) => ({
                   space,
                   name,
@@ -636,6 +684,8 @@ export function createDbSignCommand(
                 })),
                 advancedRefs: advanced.map(({ space, name, hash }) => ({ space, name, hash })),
                 rerunCommand: rerun,
+                migrateCommand: migrate,
+                diagnostics,
                 cause: unwritten[0]?.cause,
               }),
             ),
@@ -649,33 +699,6 @@ export function createDbSignCommand(
           spaces,
           advancedRefs: advanced.map(({ space, name, hash }) => ({ space, name, hash })),
         };
-        const diagnostics: Diagnostic[] = spaces.flatMap((outcome) => {
-          switch (outcome.status) {
-            case 'failed':
-              return [
-                schemaVerdictDiagnostic({
-                  result: outcome.schema,
-                  space: outcome.space,
-                  nextActions: schemaDriftNextActions({
-                    verb: 'sign',
-                    contractRef,
-                    issues: outcome.schema.schema.issues,
-                  }),
-                }),
-              ];
-            case 'conflict':
-              return [markerConflictDiagnostic(outcome, rerun)];
-            case 'missing-invariants':
-              return [
-                missingInvariantsDiagnostic(
-                  outcome,
-                  cliCommand(cliInvocation(ctx, args.flags.db), 'db migrate'),
-                ),
-              ];
-            default:
-              return [];
-          }
-        });
         return ok(
           ctx.present(
             {
