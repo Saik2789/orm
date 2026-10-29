@@ -253,10 +253,15 @@ export default function postgres<
       }
 
       if (driverConnected || connectPromise) {
-        throw postgresError('DRIVER.ALREADY_CONNECTED', 'Postgres client already connected', {
-          fix: 'Call connect() at most once per client.',
-          meta: { extension: 'postgres' },
-        });
+        if (bindingInput !== undefined) {
+          throw postgresError('DRIVER.ALREADY_CONNECTED', 'Postgres client already connected', {
+            fix: 'Options were passed to a client that is already bound. Call connect() without options, or create a new client for another database.',
+            meta: { extension: 'postgres' },
+          });
+        }
+        const runtime = getRuntime();
+        await connectPromise;
+        return runtime;
       }
 
       if (bindingInput !== undefined) {

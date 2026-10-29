@@ -161,10 +161,18 @@ describe('facade lifecycle codes', () => {
     });
   });
 
-  it('second connect() raises DRIVER.ALREADY_CONNECTED', async () => {
+  it('second connect() resolves with the same runtime', async () => {
+    const db = postgres({ contract, url: 'postgres://localhost:5432/db' });
+    const first = await db.connect();
+    await expect(db.connect()).resolves.toBe(first);
+  });
+
+  it('connect(options) after connect() raises DRIVER.ALREADY_CONNECTED', async () => {
     const db = postgres({ contract, url: 'postgres://localhost:5432/db' });
     await db.connect();
-    const error = await captureAsync(() => db.connect().then(() => undefined));
+    const error = await captureAsync(() =>
+      db.connect({ url: 'postgres://localhost:5432/db' }).then(() => undefined),
+    );
     expect(isStructuredError(error)).toBe(true);
     expect(error).toMatchObject({
       code: 'DRIVER.ALREADY_CONNECTED',
