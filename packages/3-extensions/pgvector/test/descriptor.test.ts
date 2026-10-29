@@ -1,3 +1,4 @@
+import { computeMigrationHash } from '@internal/migration-tools/hash';
 import { assertDescriptorSelfConsistency } from '@internal/migration-tools/spaces';
 import { sqlContractCanonicalizationHooks } from '@internal/sql-contract/canonicalization-hooks';
 import { describe, expect, it } from 'vitest';
@@ -62,6 +63,15 @@ describe('pgvector extension descriptor', () => {
 
   it('points the head ref at the contract and requires no invariant', () => {
     expect(space.headRef).toEqual({ hash: headHash, invariants: [] });
+  });
+
+  it("records each migration's hash of its contents", () => {
+    const hashes = (hash: (m: (typeof space.migrations)[number]) => string) =>
+      Object.fromEntries(space.migrations.map((m) => [m.dirName, hash(m)]));
+    expect(space.migrations).toHaveLength(3);
+    expect(hashes((m) => computeMigrationHash(m.metadata, m.ops))).toEqual(
+      hashes((m) => m.metadata.migrationHash),
+    );
   });
 
   it('passes the self-consistency check', () => {
