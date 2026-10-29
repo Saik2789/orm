@@ -134,7 +134,7 @@ describe('mongo() facade — e2e (replica set)', {
       try {
         await db.connect();
         await expect(db.connect({ uri: replSet.getUri(), dbName: 'facade_twice' })).rejects.toThrow(
-          'Mongo client already connected',
+          'Mongo client is already bound',
         );
       } finally {
         await db.close();

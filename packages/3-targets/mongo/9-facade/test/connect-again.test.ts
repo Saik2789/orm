@@ -57,13 +57,33 @@ const fakeContract = {
 } as unknown as AnyMongoContract;
 const url = 'mongodb://localhost:27017/mydb';
 const fakeRuntime = { execute: vi.fn().mockResolvedValue({ affectedCount: 0 }) };
+const closed = { code: 'DRIVER.NOT_CONNECTED', message: 'Mongo client is closed' };
+const alreadyBound = { code: 'DRIVER.ALREADY_CONNECTED' };
 
 function client() {
   return mongo({ contract: fakeContract, url });
 }
 
-function ormExecutor(): { execute(plan: unknown): Promise<unknown> } {
-  return mocks.mongoOrm.mock.calls.at(-1)?.[0].executor;
+function query(): Promise<unknown> {
+  const executor: { execute(plan: unknown): Promise<unknown> } =
+    mocks.mongoOrm.mock.calls.at(-1)?.[0].executor;
+  return executor.execute({});
+}
+
+function startQueryIgnoringItsResult(): void {
+  void query().catch(() => undefined);
+}
+
+async function stillPending(promise: Promise<unknown>): Promise<boolean> {
+  const marker = Symbol('pending');
+  const winner = await Promise.race([
+    promise.then(
+      () => undefined,
+      () => undefined,
+    ),
+    new Promise((resolve) => setTimeout(resolve, 0, marker)),
+  ]);
+  return winner === marker;
 }
 
 function driverConnectsWhenReleased() {
@@ -88,10 +108,93 @@ beforeEach(() => {
   mocks.createMongoRuntime.mockReturnValue(fakeRuntime);
 });
 
-describe('connect() on a mongo() client', () => {
+describe('connect() on a mongo() client that is not connected', () => {
+  it('binds the client to options and connects it', async () => {
+    const db = mongo({ contract: fakeContract });
+
+    await expect(db.connect({ url })).resolves.toBe(fakeRuntime);
+    expect(mocks.driverFromConnection).toHaveBeenCalledWith(url, 'mydb');
+  });
+});
+
+describe('connect() on a mongo() client that is connecting', () => {
+  it('waits for a connection connect() started, then resolves with the same runtime', async () => {
+    const release = driverConnectsWhenReleased();
+    const db = client();
+    const first = db.connect();
+    const second = db.connect();
+
+    expect(await stillPending(second)).toBe(true);
+    release({});
+    const [a, b] = await Promise.all([first, second]);
+    expect(a).toBe(b);
+    expect(a).toBe(fakeRuntime);
+    expect(mocks.driverFromConnection).toHaveBeenCalledTimes(1);
+  });
+
+  it('waits for a connection a query started, then resolves with the runtime', async () => {
+    const release = driverConnectsWhenReleased();
+    const db = client();
+    startQueryIgnoringItsResult();
+    const connected = db.connect();
+
+    expect(await stillPending(connected)).toBe(true);
+    release({});
+    await expect(connected).resolves.toBe(fakeRuntime);
+    expect(mocks.driverFromConnection).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects with the error of a connection connect() started', async () => {
+    const release = driverConnectsWhenReleased();
+    const db = client();
+    const first = db.connect();
+    const second = db.connect();
+    release({ error: new Error('connect failed') });
+
+    await expect(first).rejects.toThrow('connect failed');
+    await expect(second).rejects.toThrow('connect failed');
+  });
+
+  it('rejects with the error of a connection a query started, and a later connect() tries again', async () => {
+    const release = driverConnectsWhenReleased();
+    const db = client();
+    startQueryIgnoringItsResult();
+    const connected = db.connect();
+    release({ error: new Error('connect failed') });
+
+    await expect(connected).rejects.toThrow('connect failed');
+    await expect(db.connect()).resolves.toBe(fakeRuntime);
+    expect(mocks.driverFromConnection).toHaveBeenCalledTimes(2);
+  });
+
+  it('rejects options with DRIVER.ALREADY_CONNECTED', async () => {
+    const release = driverConnectsWhenReleased();
+    const db = client();
+    const first = db.connect();
+
+    await expect(db.connect({ url })).rejects.toMatchObject(alreadyBound);
+    release({});
+    await first;
+  });
+
+  it('rejects every waiting call with DRIVER.NOT_CONNECTED when close() runs first', async () => {
+    const release = driverConnectsWhenReleased();
+    const db = client();
+    const first = db.connect();
+    const second = db.connect();
+    const closing = db.close();
+    release({});
+
+    await expect(first).rejects.toMatchObject(closed);
+    await expect(second).rejects.toMatchObject(closed);
+    await closing;
+  });
+});
+
+describe('connect() on a mongo() client that is connected', () => {
   it('resolves with the runtime after a query connected the client', async () => {
     const db = client();
-    await ormExecutor().execute({});
+    await query();
 
     await expect(db.connect()).resolves.toBe(fakeRuntime);
     expect(mocks.driverFromConnection).toHaveBeenCalledTimes(1);
@@ -105,56 +208,40 @@ describe('connect() on a mongo() client', () => {
     expect(mocks.driverFromConnection).toHaveBeenCalledTimes(1);
   });
 
-  it('waits for a connection in progress and resolves with the same runtime', async () => {
-    const release = driverConnectsWhenReleased();
+  it('treats connect(undefined) as connect()', async () => {
     const db = client();
-    const first = db.connect();
-    const second = db.connect();
-    release({});
+    const first = await db.connect();
 
-    const [a, b] = await Promise.all([first, second]);
-    expect(a).toBe(b);
-    expect(a).toBe(fakeRuntime);
-    expect(mocks.driverFromConnection).toHaveBeenCalledTimes(1);
+    await expect(db.connect(undefined)).resolves.toBe(first);
   });
 
-  it('rejects with the error of the connection in progress when it fails', async () => {
-    const release = driverConnectsWhenReleased();
-    const db = client();
-    const first = db.connect();
-    const second = db.connect();
-    release({ error: new Error('connect failed') });
-
-    await expect(first).rejects.toThrow('connect failed');
-    await expect(second).rejects.toThrow('connect failed');
-  });
-
-  it('rejects options on a connected client with DRIVER.ALREADY_CONNECTED', async () => {
+  it('rejects options with DRIVER.ALREADY_CONNECTED', async () => {
     const db = client();
     await db.connect();
 
     await expect(db.connect({ url })).rejects.toMatchObject({
       code: 'DRIVER.ALREADY_CONNECTED',
-      message: 'Mongo client already connected',
-      fix: 'Options were passed to a client that is already bound. Call connect() without options, or create a new client for another database.',
+      message: 'Mongo client is already bound',
+      why: 'connect() was given options after the client was bound to a database.',
+      fix: 'Call connect() without options, or create a new client for another database.',
+      meta: { extension: 'mongo' },
     });
   });
+});
 
-  it('rejects options on a connecting client with DRIVER.ALREADY_CONNECTED', async () => {
-    const release = driverConnectsWhenReleased();
-    const db = client();
-    const first = db.connect();
-
-    await expect(db.connect({ url })).rejects.toMatchObject({ code: 'DRIVER.ALREADY_CONNECTED' });
-    release({});
-    await first;
-  });
-
-  it('rejects after close() with DRIVER.NOT_CONNECTED', async () => {
+describe('connect() on a closed mongo() client', () => {
+  it('rejects with DRIVER.NOT_CONNECTED', async () => {
     const db = client();
     await db.connect();
     await db.close();
 
-    await expect(db.connect()).rejects.toMatchObject({ code: 'DRIVER.NOT_CONNECTED' });
+    await expect(db.connect()).rejects.toMatchObject(closed);
+  });
+
+  it('rejects options with DRIVER.NOT_CONNECTED', async () => {
+    const db = client();
+    await db.close();
+
+    await expect(db.connect({ url })).rejects.toMatchObject(closed);
   });
 });

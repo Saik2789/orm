@@ -234,7 +234,7 @@ describe('facade lifecycle structured codes', () => {
     expect(isStructuredError(error)).toBe(true);
     expect(error).toMatchObject({
       code: 'DRIVER.ALREADY_CONNECTED',
-      message: 'Mongo client already connected',
+      message: 'Mongo client is already bound',
       meta: { extension: 'mongo' },
     });
   });
