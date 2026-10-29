@@ -29,12 +29,12 @@ function contractFor(table: string): Contract {
 const appContract = contractFor('user');
 const extContract = contractFor('vector_index');
 
-function space(spaceId: string, contract: Contract) {
+function space(spaceId: string, contract: Contract, invariants: readonly string[] = []) {
   return createAggregateContractSpace({
     spaceId,
     packages: [],
     refs: {},
-    headRef: { hash: contract.storage.storageHash, invariants: [] },
+    headRef: { hash: contract.storage.storageHash, invariants },
     refsDir: `migrations/${spaceId}/refs`,
     migrationsDir: `migrations/${spaceId}`,
     resolveContract: () => contract,
@@ -49,7 +49,7 @@ const aggregate = createContractSpaceAggregate({
   checkIntegrity: () => [],
 });
 
-function marker(storageHash: string): ContractMarkerRecord {
+function marker(storageHash: string, invariants: readonly string[] = []): ContractMarkerRecord {
   return {
     storageHash,
     profileHash: `${storageHash}-profile`,
@@ -58,13 +58,14 @@ function marker(storageHash: string): ContractMarkerRecord {
     updatedAt: new Date(0),
     appTag: null,
     meta: {},
-    invariants: [],
+    invariants: [...invariants],
   };
 }
 
 function familySigning(
   signatures: (spaces: readonly SpaceToSign[]) => SpaceSignature[],
   verifies: (contract: unknown) => boolean = () => true,
+  markers: ReadonlyMap<string, ContractMarkerRecord> = new Map([['app', marker('old-app')]]),
 ) {
   const calls: string[] = [];
   const signed: SpaceToSign[][] = [];
@@ -74,7 +75,7 @@ function familySigning(
   >({
     readAllMarkers: async () => {
       calls.push('readAllMarkers');
-      return new Map([['app', marker('old-app')]]);
+      return markers;
     },
     introspect: async () => {
       calls.push('introspect');
@@ -193,5 +194,158 @@ describe('signContractSpaces', () => {
         profileHash: extContract.profileHash,
       },
     });
+  });
+});
+
+describe('signContractSpaces with invariants the head ref requires', () => {
+  const INSTALL_VECTOR = 'pgvector:install-vector-v1';
+
+  function aggregateWith(extension: ReturnType<typeof space>, app = space('app', appContract)) {
+    return createContractSpaceAggregate({
+      targetId: 'postgres',
+      app,
+      extensions: [extension],
+      checkIntegrity: () => [],
+    });
+  }
+
+  it('refuses a space whose marker lacks a required invariant, and writes no marker', async () => {
+    const family = familySigning(
+      signedEverySpace,
+      () => true,
+      new Map([['pgvector', marker('old-ext')]]),
+    );
+
+    const result = await signContractSpaces({
+      driver,
+      familyInstance: family.familyInstance,
+      aggregate: aggregateWith(space('pgvector', extContract, [INSTALL_VECTOR])),
+      frameworkComponents: [],
+    });
+
+    expect(family.calls).not.toContain('signSpaces');
+    expect(result.assertOk().spaces[1]).toEqual({
+      space: 'pgvector',
+      status: 'missing-invariants',
+      contract: {
+        storageHash: extContract.storage.storageHash,
+        profileHash: extContract.profileHash,
+      },
+      missingInvariants: [INSTALL_VECTOR],
+    });
+  });
+
+  it('refuses a space with no marker whose head ref requires an invariant', async () => {
+    const family = familySigning(signedEverySpace, () => true, new Map());
+
+    const result = await signContractSpaces({
+      driver,
+      familyInstance: family.familyInstance,
+      aggregate: aggregateWith(space('pgvector', extContract, [INSTALL_VECTOR])),
+      frameworkComponents: [],
+    });
+
+    expect(family.calls).not.toContain('signSpaces');
+    expect(result.assertOk().spaces[1]).toMatchObject({
+      space: 'pgvector',
+      status: 'missing-invariants',
+      missingInvariants: [INSTALL_VECTOR],
+    });
+  });
+
+  it('signs a space whose marker already records every required invariant', async () => {
+    const family = familySigning(
+      signedEverySpace,
+      () => true,
+      new Map([['pgvector', marker('old-ext', [INSTALL_VECTOR, 'pgvector:other'])]]),
+    );
+
+    const result = await signContractSpaces({
+      driver,
+      familyInstance: family.familyInstance,
+      aggregate: aggregateWith(space('pgvector', extContract, [INSTALL_VECTOR])),
+      frameworkComponents: [],
+    });
+
+    expect(family.signed).toEqual([
+      [
+        {
+          space: 'pgvector',
+          contract: extContract,
+          expected: { storageHash: 'old-ext', profileHash: 'old-ext-profile' },
+        },
+        { space: 'app', contract: appContract, expected: null },
+      ],
+    ]);
+    expect(result.assertOk().spaces.map((outcome) => outcome.status)).toEqual([
+      'created',
+      'created',
+    ]);
+  });
+
+  it('signs every space when no head ref requires an invariant', async () => {
+    const family = familySigning(signedEverySpace);
+
+    const result = await signContractSpaces({
+      driver,
+      familyInstance: family.familyInstance,
+      aggregate,
+      frameworkComponents: [],
+    });
+
+    expect(family.calls).toContain('signSpaces');
+    expect(result.assertOk().spaces.map((outcome) => outcome.status)).toEqual([
+      'created',
+      'created',
+    ]);
+  });
+
+  it('writes no marker for any space when one space is refused', async () => {
+    const family = familySigning(signedEverySpace);
+
+    const result = await signContractSpaces({
+      driver,
+      familyInstance: family.familyInstance,
+      aggregate: aggregateWith(space('pgvector', extContract, [INSTALL_VECTOR])),
+      frameworkComponents: [],
+    });
+
+    expect(family.calls).toEqual(['readAllMarkers', 'introspect']);
+    expect(result.assertOk().spaces).toEqual([
+      {
+        space: 'app',
+        status: 'withheld',
+        contract: {
+          storageHash: appContract.storage.storageHash,
+          profileHash: appContract.profileHash,
+        },
+        refusedSpaces: ['pgvector'],
+      },
+      {
+        space: 'pgvector',
+        status: 'missing-invariants',
+        contract: {
+          storageHash: extContract.storage.storageHash,
+          profileHash: extContract.profileHash,
+        },
+        missingInvariants: [INSTALL_VECTOR],
+      },
+    ]);
+  });
+
+  it('still reports a space that fails verification as failed when another space is refused', async () => {
+    const family = familySigning(signedEverySpace, (contract) => contract !== appContract);
+
+    const result = await signContractSpaces({
+      driver,
+      familyInstance: family.familyInstance,
+      aggregate: aggregateWith(space('pgvector', extContract, [INSTALL_VECTOR])),
+      frameworkComponents: [],
+    });
+
+    expect(result.assertOk().spaces.map((outcome) => outcome.status)).toEqual([
+      'failed',
+      'missing-invariants',
+    ]);
   });
 });
