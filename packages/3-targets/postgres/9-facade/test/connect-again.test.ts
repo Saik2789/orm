@@ -32,9 +32,31 @@ import postgres from '../src/runtime/postgres';
 
 const contract = contractFromJson<Contract>(fixtureContractJson);
 const url = 'postgres://localhost:5432/db';
+const closed = { code: 'DRIVER.NOT_CONNECTED', message: 'Postgres client is closed' };
+const alreadyBound = { code: 'DRIVER.ALREADY_CONNECTED' };
 
 function client() {
   return postgres({ contract, url, verifyMarker: false });
+}
+
+function query(db: ReturnType<typeof client>) {
+  return db.query(db.sql.public.users.select('id').build()).toArray();
+}
+
+function startQueryIgnoringItsResult(db: ReturnType<typeof client>): void {
+  void query(db).catch(() => undefined);
+}
+
+async function stillPending(promise: Promise<unknown>): Promise<boolean> {
+  const marker = Symbol('pending');
+  const winner = await Promise.race([
+    promise.then(
+      () => undefined,
+      () => undefined,
+    ),
+    new Promise((resolve) => setTimeout(resolve, 0, marker)),
+  ]);
+  return winner === marker;
 }
 
 function driverConnectsWhenReleased() {
@@ -60,10 +82,93 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('connect() on a postgres() client', () => {
+describe('connect() on a postgres() client that is not connected', () => {
+  it('binds the client to options and connects it', async () => {
+    const db = postgres({ contract, verifyMarker: false });
+
+    await expect(db.connect({ url })).resolves.toBe(db.runtime());
+    await db.close();
+  });
+});
+
+describe('connect() on a postgres() client that is connecting', () => {
+  it('waits for a connection connect() started, then resolves with the same runtime', async () => {
+    const release = driverConnectsWhenReleased();
+    const db = client();
+    const first = db.connect();
+    const second = db.connect();
+
+    expect(await stillPending(second)).toBe(true);
+    release({});
+    const [a, b] = await Promise.all([first, second]);
+    expect(a).toBe(b);
+    expect(a).toBe(db.runtime());
+    await db.close();
+  });
+
+  it('waits for a connection a query started, then resolves with the runtime', async () => {
+    const release = driverConnectsWhenReleased();
+    const db = client();
+    startQueryIgnoringItsResult(db);
+    const connected = db.connect();
+
+    expect(await stillPending(connected)).toBe(true);
+    release({});
+    await expect(connected).resolves.toBe(db.runtime());
+    await db.close();
+  });
+
+  it('rejects with the error of a connection connect() started', async () => {
+    const release = driverConnectsWhenReleased();
+    const db = client();
+    const first = db.connect();
+    const second = db.connect();
+    release({ error: new Error('connect failed') });
+
+    await expect(first).rejects.toThrow('connect failed');
+    await expect(second).rejects.toThrow('connect failed');
+  });
+
+  it('rejects with the error of a connection a query started, and keeps rejecting with it', async () => {
+    const release = driverConnectsWhenReleased();
+    const db = client();
+    startQueryIgnoringItsResult(db);
+    const connected = db.connect();
+    release({ error: new Error('connect failed') });
+
+    await expect(connected).rejects.toThrow('connect failed');
+    await expect(db.connect()).rejects.toThrow('connect failed');
+  });
+
+  it('rejects options with DRIVER.ALREADY_CONNECTED', async () => {
+    const release = driverConnectsWhenReleased();
+    const db = client();
+    const first = db.connect();
+
+    await expect(db.connect({ url })).rejects.toMatchObject(alreadyBound);
+    release({});
+    await first;
+    await db.close();
+  });
+
+  it('rejects every waiting call with DRIVER.NOT_CONNECTED when close() runs first', async () => {
+    const release = driverConnectsWhenReleased();
+    const db = client();
+    const first = db.connect();
+    const second = db.connect();
+    const closing = db.close();
+    release({});
+
+    await expect(first).rejects.toMatchObject(closed);
+    await expect(second).rejects.toMatchObject(closed);
+    await closing;
+  });
+});
+
+describe('connect() on a postgres() client that is connected', () => {
   it('resolves with the runtime after a query connected the client', async () => {
     const db = client();
-    await db.query(db.sql.public.users.select('id').build()).toArray();
+    await query(db);
 
     await expect(db.connect()).resolves.toBe(db.runtime());
     await db.close();
@@ -85,70 +190,34 @@ describe('connect() on a postgres() client', () => {
     await db.close();
   });
 
-  it('waits for a connection in progress and resolves with the same runtime', async () => {
-    const release = driverConnectsWhenReleased();
-    const db = client();
-    const first = db.connect();
-    const second = db.connect();
-    release({});
-
-    const [a, b] = await Promise.all([first, second]);
-    expect(a).toBe(b);
-    expect(a).toBe(db.runtime());
-    await db.close();
-  });
-
-  it('waits for a connection a query started', async () => {
-    const release = driverConnectsWhenReleased();
-    const db = client();
-    const rows = db.query(db.sql.public.users.select('id').build()).toArray();
-    const connected = db.connect();
-    release({});
-
-    await expect(connected).resolves.toBe(db.runtime());
-    await rows;
-    await db.close();
-  });
-
-  it('rejects with the error of the connection in progress when it fails', async () => {
-    const release = driverConnectsWhenReleased();
-    const db = client();
-    const first = db.connect();
-    const second = db.connect();
-    release({ error: new Error('connect failed') });
-
-    await expect(first).rejects.toThrow('connect failed');
-    await expect(second).rejects.toThrow('connect failed');
-  });
-
-  it('rejects options on a connected client with DRIVER.ALREADY_CONNECTED', async () => {
+  it('rejects options with DRIVER.ALREADY_CONNECTED', async () => {
     const db = client();
     await db.connect();
 
     await expect(db.connect({ url })).rejects.toMatchObject({
       code: 'DRIVER.ALREADY_CONNECTED',
-      message: 'Postgres client already connected',
-      fix: 'Options were passed to a client that is already bound. Call connect() without options, or create a new client for another database.',
+      message: 'Postgres client is already bound',
+      why: 'connect() was given options after the client was bound to a database.',
+      fix: 'Call connect() without options, or create a new client for another database.',
+      meta: { extension: 'postgres' },
     });
     await db.close();
   });
+});
 
-  it('rejects options on a connecting client with DRIVER.ALREADY_CONNECTED', async () => {
-    const release = driverConnectsWhenReleased();
-    const db = client();
-    const first = db.connect();
-
-    await expect(db.connect({ url })).rejects.toMatchObject({ code: 'DRIVER.ALREADY_CONNECTED' });
-    release({});
-    await first;
-    await db.close();
-  });
-
-  it('rejects after close() with DRIVER.NOT_CONNECTED', async () => {
+describe('connect() on a closed postgres() client', () => {
+  it('rejects with DRIVER.NOT_CONNECTED', async () => {
     const db = client();
     await db.connect();
     await db.close();
 
-    await expect(db.connect()).rejects.toMatchObject({ code: 'DRIVER.NOT_CONNECTED' });
+    await expect(db.connect()).rejects.toMatchObject(closed);
+  });
+
+  it('rejects options with DRIVER.NOT_CONNECTED', async () => {
+    const db = client();
+    await db.close();
+
+    await expect(db.connect({ url })).rejects.toMatchObject(closed);
   });
 });

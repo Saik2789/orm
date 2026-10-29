@@ -176,7 +176,7 @@ describe('facade lifecycle codes', () => {
     expect(isStructuredError(error)).toBe(true);
     expect(error).toMatchObject({
       code: 'DRIVER.ALREADY_CONNECTED',
-      message: 'Postgres client already connected',
+      message: 'Postgres client is already bound',
     });
   });
 
