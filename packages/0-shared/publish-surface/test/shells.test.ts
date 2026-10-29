@@ -56,9 +56,7 @@ describe('publicShells', () => {
   // rule stands for.
   it('classifies each shell the way its name says', () => {
     const expectedKind = (name: string) => {
-      if (name.startsWith('@prisma/orm-extension-') || name === '@prisma/orm-postgres-contrib') {
-        return 'extension';
-      }
+      if (name.startsWith('@prisma/orm-extension-')) return 'extension';
       return /^@prisma\/orm-(framework|toolchain|family-|target-)/.test(name)
         ? 'platform'
         : 'facade';

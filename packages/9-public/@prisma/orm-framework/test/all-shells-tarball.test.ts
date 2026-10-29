@@ -30,7 +30,6 @@ const uncoveredElsewhere = [
   '@prisma/orm-extension-supabase',
   '@prisma/orm-extension-arktype-json',
   '@prisma/orm-extension-middleware-cache',
-  '@prisma/orm-postgres-contrib',
 ];
 const adrExampleNames = [
   '@prisma/orm-framework/contract',

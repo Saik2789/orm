@@ -5,10 +5,7 @@ import type { ContractSourceContext } from '@internal/config/config-types';
 import type { Contract } from '@internal/contract/types';
 import postgresDriver from '@internal/driver-postgres/control';
 import sql from '@internal/family-sql/control';
-import {
-  type ControlExtensionDescriptor,
-  createControlStack,
-} from '@internal/framework-components/control';
+import { createControlStack } from '@internal/framework-components/control';
 import { parse } from '@internal/psl-parser/syntax';
 import type { SqlStorage } from '@internal/sql-contract/types';
 import postgres from '@internal/target-postgres/control';
@@ -17,21 +14,17 @@ import { PostgresContractSerializer } from '@internal/target-postgres/runtime';
 import { dirname, join } from 'pathe';
 import { interpretPrisma7Documents } from '../src/interpreter';
 import { prisma7Contract } from '../src/provider';
-import type { Prisma7TargetBinding } from '../src/target-binding';
 
 export const fixturesDir = join(dirname(fileURLToPath(import.meta.url)), 'fixtures');
 
-/** The same composition `prisma contract emit` builds for a Postgres config with these extensions. */
-export function postgresSourceContext(
-  resolvedInputs: readonly string[],
-  extensions: readonly ControlExtensionDescriptor<'sql', 'postgres'>[] = [],
-): ContractSourceContext {
+/** The same composition `prisma contract emit` builds for a Postgres config. */
+export function postgresSourceContext(resolvedInputs: readonly string[]): ContractSourceContext {
   const stack = createControlStack({
     family: sql,
     target: postgres,
     adapter: postgresAdapter,
     driver: postgresDriver,
-    extensions,
+    extensions: [],
   });
   return {
     composedExtensions: stack.extensions.map((extension) => extension.id),
@@ -116,14 +109,9 @@ export function fixtureSchemaText(caseName: string): string {
   return readFileSync(join(fixturesDir, caseName, 'schema.prisma'), 'utf8');
 }
 
-interface InterpretOptions {
-  readonly binding?: Prisma7TargetBinding;
-  readonly extensions?: readonly ControlExtensionDescriptor<'sql', 'postgres'>[];
-}
-
-/** Interprets Prisma 7 schema text with the Postgres composition, or the binding and extensions given. */
-export function interpretSchemaTextResult(text: string, options: InterpretOptions = {}) {
-  const context = postgresSourceContext(['schema.prisma'], options.extensions);
+/** Interprets Prisma 7 schema text with the Postgres composition. */
+export function interpretSchemaTextResult(text: string) {
+  const context = postgresSourceContext(['schema.prisma']);
   const { document, sources } = parse(text, 'schema.prisma', { grammar: 'prisma-7' });
   return interpretPrisma7Documents({
     documents: [
@@ -136,7 +124,7 @@ export function interpretSchemaTextResult(text: string, options: InterpretOption
     ],
     seedDiagnostics: [],
     defaultNamespaceId: context.defaultNamespaceId,
-    binding: options.binding ?? prisma7PostgresBinding,
+    binding: prisma7PostgresBinding,
     controlMutationDefaults: context.controlMutationDefaults,
     generatorFunctions: context.generatorFunctions,
     authoringContributions: context.authoringContributions,
@@ -147,11 +135,8 @@ export function interpretSchemaTextResult(text: string, options: InterpretOption
 }
 
 /** Interprets Prisma 7 schema text with the Postgres composition, or throws the diagnostics. */
-export function interpretSchemaText(
-  text: string,
-  options: InterpretOptions = {},
-): Contract<SqlStorage> {
-  const result = interpretSchemaTextResult(text, options);
+export function interpretSchemaText(text: string): Contract<SqlStorage> {
+  const result = interpretSchemaTextResult(text);
   if (!result.ok) throw new Error(JSON.stringify(result.failure.diagnostics));
   return result.value as Contract<SqlStorage>;
 }
