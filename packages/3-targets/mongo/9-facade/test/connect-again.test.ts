@@ -24,7 +24,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@internal/adapter-mongo/runtime', () => ({ default: { id: 'adapter' } }));
 vi.mock('@internal/target-mongo/runtime', () => ({ default: { id: 'target' } }));
 vi.mock('@internal/mongo-runtime', async (importOriginal) => ({
-  buildMongoEnums: (await importOriginal<typeof MongoRuntime>()).buildMongoEnums,
+  enumMemberCodecFor: (await importOriginal<typeof MongoRuntime>()).enumMemberCodecFor,
   createMongoExecutionStack: mocks.createMongoExecutionStack,
   createMongoExecutionContext: mocks.createMongoExecutionContext,
   createMongoRuntime: mocks.createMongoRuntime,
@@ -65,9 +65,9 @@ function client() {
 }
 
 function query(): Promise<unknown> {
-  const executor: { execute(plan: unknown): Promise<unknown> } =
-    mocks.mongoOrm.mock.calls.at(-1)?.[0].executor;
-  return executor.execute({});
+  const runtime: { execute(plan: unknown): Promise<unknown> } =
+    mocks.mongoOrm.mock.calls.at(-1)?.[0].runtime;
+  return runtime.execute({});
 }
 
 function startQueryIgnoringItsResult(): void {
@@ -102,8 +102,11 @@ function driverConnectsWhenReleased() {
 beforeEach(() => {
   for (const fn of Object.values(mocks)) fn.mockReset();
   mocks.deserializeContract.mockReturnValue(fakeContract);
-  mocks.createMongoExecutionStack.mockReturnValue({});
-  mocks.createMongoExecutionContext.mockReturnValue({});
+  mocks.createMongoExecutionStack.mockReturnValue({ adapter: { create: () => ({}) } });
+  mocks.createMongoExecutionContext.mockReturnValue({
+    contract: fakeContract,
+    codecs: { get: () => undefined },
+  });
   mocks.driverFromConnection.mockResolvedValue({ close: vi.fn().mockResolvedValue(undefined) });
   mocks.createMongoRuntime.mockReturnValue(fakeRuntime);
 });
