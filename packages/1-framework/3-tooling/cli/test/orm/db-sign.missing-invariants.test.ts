@@ -1,0 +1,124 @@
+import { ok } from '@internal/utils/result';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import type { DbSignSpaceOutcome } from '../../src/control-api/operations/db-sign';
+import {
+  cleanupProjectDirs,
+  diagnosticsOf,
+  envelopeOf,
+  HASH_A,
+  HASH_EXT,
+  harness,
+  mocks,
+  ormConfig,
+  PROFILE_HASH,
+  projectDir,
+  refHashOf,
+  resetMocks,
+} from './db-sign-fixtures';
+
+beforeEach(resetMocks);
+afterEach(cleanupProjectDirs);
+
+const INSTALL_VECTOR = 'pgvector:install-vector-v1';
+
+const refused: DbSignSpaceOutcome = {
+  space: 'pgvector',
+  status: 'missing-invariants',
+  contract: { storageHash: HASH_EXT, profileHash: PROFILE_HASH },
+  missingInvariants: [INSTALL_VECTOR],
+};
+
+const withheld: DbSignSpaceOutcome = {
+  space: 'app',
+  status: 'withheld',
+  contract: { storageHash: HASH_A, profileHash: PROFILE_HASH },
+  refusedSpaces: ['pgvector'],
+};
+
+describe('db sign refusing a space whose marker lacks a required invariant', () => {
+  beforeEach(() => {
+    mocks.dbSign.mockResolvedValue(ok({ spaces: [withheld, refused] }));
+  });
+
+  it('completes at exit 4, signs nothing and advances no ref', async () => {
+    const dir = await projectDir();
+
+    const run = await harness(ormConfig()).run(['db', 'sign', '--json'], { cwd: dir });
+
+    expect(run.exitCode).toBe(4);
+    expect(envelopeOf(run)).toMatchObject({ ok: true, exitCode: 4 });
+    expect(run.presented?.data).toEqual({
+      ok: false,
+      summary: 'Space "pgvector" requires invariants its marker does not record; signed nothing',
+      spaces: [withheld, refused],
+      advancedRefs: [],
+    });
+    expect(await refHashOf(dir, 'db')).toBeUndefined();
+  });
+
+  it('names the space and each missing invariant, and says to run db migrate', async () => {
+    const dir = await projectDir();
+
+    const run = await harness(ormConfig()).run(['db', 'sign', '--json'], { cwd: dir });
+
+    expect(diagnosticsOf(run)).toEqual([
+      {
+        code: 'MIGRATION.SIGN_INVARIANTS_MISSING',
+        severity: 'error',
+        summary: 'Space "pgvector" requires invariants its marker does not record',
+        why: `The head ref of space "pgvector" requires the invariant "${INSTALL_VECTOR}", which the database marker does not record. An invariant records that a migration ran, and db sign never runs migrations, so it signed no space.`,
+        nextActions: [
+          {
+            kind: 'run-command',
+            label: 'Run the migrations that provide the invariants, then sign again',
+            command: 'prisma-test db migrate',
+          },
+        ],
+        meta: { space: 'pgvector', missingInvariants: [INSTALL_VECTOR] },
+      },
+    ]);
+  });
+
+  it('prints each space with its status', async () => {
+    const dir = await projectDir();
+
+    const run = await harness(ormConfig()).run(['db', 'sign'], { cwd: dir });
+
+    expect(run.stdout).toBe(
+      `app\twithheld\t${HASH_A}\npgvector\tmissing-invariants\t${HASH_EXT}\n`,
+    );
+  });
+
+  it('draws the missing invariants under the refused space', async () => {
+    const dir = await projectDir();
+
+    const run = await harness(ormConfig()).run(['db', 'sign', '--no-advance-ref'], {
+      cwd: dir,
+      isTty: { stdout: true },
+    });
+
+    expect(run.presented?.presentation.human[1]).toEqual({
+      kind: 'tree',
+      roots: [
+        {
+          label: 'app: not signed, because db sign refused space "pgvector"',
+          status: 'error',
+        },
+        {
+          label:
+            'pgvector: not signed, its marker does not record invariants its head ref requires',
+          status: 'error',
+          children: [{ label: `missing invariant: ${INSTALL_VECTOR}`, status: 'error' }],
+        },
+      ],
+    });
+  });
+
+  it('spells the refusal in --help', async () => {
+    const dir = await projectDir();
+
+    const run = await harness(ormConfig()).run(['db', 'sign', '--help'], { cwd: dir });
+
+    expect(`${run.stdout}${run.stderr}`).toContain('invariants its marker does not record');
+  });
+});

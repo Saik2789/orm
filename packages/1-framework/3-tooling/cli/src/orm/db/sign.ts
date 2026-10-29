@@ -161,6 +161,20 @@ function spaceNode(outcome: DbSignSpaceOutcome): TreeNode {
         status: 'error',
         children: issueNodes(outcome.schema.schema.issues, 'error'),
       };
+    case 'missing-invariants':
+      return {
+        label: `${outcome.space}: not signed, its marker does not record invariants its head ref requires`,
+        status: 'error',
+        children: outcome.missingInvariants.map((id) => ({
+          label: `missing invariant: ${id}`,
+          status: 'error',
+        })),
+      };
+    case 'withheld':
+      return {
+        label: `${outcome.space}: not signed, because db sign refused ${outcome.refusedSpaces.length === 1 ? 'space' : 'spaces'} ${outcome.refusedSpaces.map((space) => `"${space}"`).join(', ')}`,
+        status: 'error',
+      };
     case 'conflict':
       return {
         label: `${outcome.space}: not signed, its marker changed after the schema was verified`,
@@ -180,7 +194,9 @@ function spaceNode(outcome: DbSignSpaceOutcome): TreeNode {
 }
 
 function isSigned(outcome: DbSignSpaceOutcome): boolean {
-  return outcome.status !== 'failed' && outcome.status !== 'conflict';
+  return (
+    outcome.status === 'created' || outcome.status === 'updated' || outcome.status === 'unchanged'
+  );
 }
 
 function quotedList(spaces: readonly DbSignSpaceOutcome[]): string {
@@ -190,11 +206,17 @@ function quotedList(spaces: readonly DbSignSpaceOutcome[]): string {
 function signSummary(spaces: readonly DbSignSpaceOutcome[]): string {
   const failed = spaces.filter((outcome) => outcome.status === 'failed');
   const conflicts = spaces.filter((outcome) => outcome.status === 'conflict');
-  if (failed.length === 0 && conflicts.length === 0) {
+  const refused = spaces.filter((outcome) => outcome.status === 'missing-invariants');
+  if (failed.length === 0 && conflicts.length === 0 && refused.length === 0) {
     return 'Database signed';
   }
   const signed = spaces.filter(isSigned);
   const problems = [
+    ...(refused.length === 0
+      ? []
+      : [
+          `${refused.length === 1 ? 'space' : 'spaces'} ${quotedList(refused)} ${refused.length === 1 ? 'requires invariants its marker does' : 'require invariants their markers do'} not record`,
+        ]),
     ...(failed.length === 0
       ? []
       : [
@@ -249,6 +271,31 @@ function markerConflictDiagnostic(
       foundStorageHash: found?.storageHash ?? null,
       destinationStorageHash: outcome.contract.storageHash,
     },
+  };
+}
+
+function missingInvariantsDiagnostic(
+  outcome: Extract<DbSignSpaceOutcome, { readonly status: 'missing-invariants' }>,
+  migrate: string,
+): Diagnostic {
+  const missing = outcome.missingInvariants.map((id) => `"${id}"`).join(', ');
+  const required =
+    outcome.missingInvariants.length === 1
+      ? `the invariant ${missing}, which the database marker does not record`
+      : `the invariants ${missing}, which the database marker does not record`;
+  return {
+    code: 'MIGRATION.SIGN_INVARIANTS_MISSING',
+    severity: 'error',
+    summary: `Space "${outcome.space}" requires invariants its marker does not record`,
+    why: `The head ref of space "${outcome.space}" requires ${required}. An invariant records that a migration ran, and db sign never runs migrations, so it signed no space.`,
+    nextActions: [
+      {
+        kind: 'run-command',
+        label: 'Run the migrations that provide the invariants, then sign again',
+        command: migrate,
+      },
+    ],
+    meta: { space: outcome.space, missingInvariants: outcome.missingInvariants },
   };
 }
 
@@ -401,7 +448,9 @@ export function createDbSignCommand(
         'contract reference, no emitted contract, unreachable database), or it\n' +
         'signed the database but could not write every ref,\n' +
         '4 = schema verification failed for a space,\n' +
-        'or its marker changed while db sign ran; its signature was not written.',
+        'or its marker changed while db sign ran; its signature was not written.\n' +
+        'Also 4 when a space requires invariants its marker does not record; then\n' +
+        'no signature is written for any space, and db migrate provides them.',
       examples: [
         'db sign',
         'db sign --db $DATABASE_URL',
@@ -432,7 +481,7 @@ export function createDbSignCommand(
     },
     needs: { config: ormConfigSection },
     exitCodes: {
-      4: 'schema verification failed for a space, or its marker changed while db sign ran; its signature was not written',
+      4: 'schema verification failed for a space, or its marker changed while db sign ran, and its signature was not written; or a space requires invariants its marker does not record, and no signature was written',
     },
     handler: async (args, ctx) => {
       const positionalContract = args.positionals.contract;
@@ -621,6 +670,13 @@ export function createDbSignCommand(
               ];
             case 'conflict':
               return [markerConflictDiagnostic(outcome, rerun)];
+            case 'missing-invariants':
+              return [
+                missingInvariantsDiagnostic(
+                  outcome,
+                  cliCommand(cliInvocation(ctx, args.flags.db), 'db migrate'),
+                ),
+              ];
             default:
               return [];
           }
