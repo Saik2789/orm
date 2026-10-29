@@ -91,7 +91,7 @@ Two commands print a document instead of data lines: `contract print` prints the
 | `migration ref set` | the contract hash the ref now points at |
 | `db migrate` | `space`, `name`, `from`, `to`, `operations` per applied migration |
 | `db migrate --show` | `space`, `name`, `from`, `to` per migration that will run; there is no operation count before the run |
-| `db sign` | `space`, `status`, `storage hash` per space; `status` is the JSON status (`created`, `updated`, `unchanged`, `conflict` or `failed`) |
+| `db sign` | `space`, `status`, `storage hash` per space; `status` is the JSON status (`created`, `updated`, `unchanged`, `conflict`, `failed` or `missing-invariants`) |
 | `orm init` | the paths of the files written |
 | `contract emit` | the paths of `contract.json` and `contract.d.ts`, then each path it wrote under `migrations/` for an extension pack |
 | `contract print` | the PSL, when not written with `--output` |
@@ -785,12 +785,12 @@ database  postgresql://localhost/app
 }
 ```
 
-Each space has `space`, `status` and `contract`. `status` is `created` (the space had no marker), `updated` (with `previous`, the hashes the marker held), `unchanged` (the marker already held the contract's hashes), `failed` or `conflict`. A failed space also carries `schema`, the schema verification result; `ok` is then `false` and `summary` names the failed and the signed spaces, for example `Database schema does not satisfy contract for space "app"; signed "pgvector"`. Each failed space also produces one `CONTRACT.SCHEMA_VERIFICATION_FAILED` diagnostic with `space` in its meta. A space in conflict carries `expected` and `found`, the marker hashes `db sign` read and the ones it found when it came to write; `summary` then says, for example, `Marker of space "app" changed while db sign ran; signed "pgvector"`, and the space produces one `MIGRATION.MARKER_CAS_FAILURE` diagnostic with `space`, `expectedStorageHash`, `foundStorageHash` and `destinationStorageHash` in its meta.
+Each space has `space`, `status` and `contract`. `status` is `created` (the space had no marker), `updated` (with `previous`, the hashes the marker held), `unchanged` (the marker already held the contract's hashes), `failed`, `conflict`, or `missing-invariants` (the space's head ref requires invariants its marker does not record, listed in `missingInvariants`; run `db migrate`). A failed space also carries `schema`, the schema verification result; `ok` is then `false` and `summary` names the failed and the signed spaces, for example `Database schema does not satisfy contract for space "app"; signed "pgvector"`. Each failed space also produces one `CONTRACT.SCHEMA_VERIFICATION_FAILED` diagnostic with `space` in its meta. A space in conflict carries `expected` and `found`, the marker hashes `db sign` read and the ones it found when it came to write; `summary` then says, for example, `Marker of space "app" changed while db sign ran; signed "pgvector"`, and the space produces one `MIGRATION.MARKER_CAS_FAILURE` diagnostic with `space`, `expectedStorageHash`, `foundStorageHash` and `destinationStorageHash` in its meta.
 
 **Exit codes:**
 - `0`: every space signed or already signed
 - `2`: the command could not run (unresolvable contract reference, no emitted contract, unreachable database, missing driver or connection), or it signed the database but could not write every ref (`MIGRATION.SIGN_REFS_NOT_WRITTEN`)
-- `4`: schema verification failed for at least one space, or its marker changed while `db sign` ran; that space's signature was not written
+- `4`: schema verification failed for at least one space, a space's marker lacks invariants its head ref requires (`MIGRATION.SIGN_INVARIANTS_MISSING`), or its marker changed while `db sign` ran; that space's signature was not written
 
 **Relationship to Other Commands:**
 - **`db verify`**: checks that the marker exists and matches the contract, then runs schema verification by default. `db sign` writes the marker that `db verify` checks.
