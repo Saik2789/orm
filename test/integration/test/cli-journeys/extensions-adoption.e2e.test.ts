@@ -9,6 +9,7 @@ import { describe, expect, it } from 'vitest';
 import { withTempDir } from '../utils/cli-test-helpers';
 import {
   type JourneyContext,
+  pgvectorPslConfigFixture,
   planMigrationAndSelfEmit,
   runContractEmit,
   runDbSign,
@@ -26,11 +27,11 @@ const PRISMA7_DATABASE = `
   CREATE TABLE "user" (id int4 PRIMARY KEY, email text NOT NULL);
 `;
 
-function composePgvector(ctx: JourneyContext): void {
-  const config = readFileSync(ctx.configPath, 'utf-8');
+function composePgvector(ctx: JourneyContext, connectionString: string): void {
+  const config = readFileSync(pgvectorPslConfigFixture, 'utf-8');
   writeFileSync(
     ctx.configPath,
-    `import pgvector from '@internal/extension-pgvector/control';\n${config.replace('extensions: []', 'extensions: [pgvector]')}`,
+    config.replace(/\{\{DB_URL\}\}/g, () => connectionString),
   );
 }
 
@@ -61,7 +62,7 @@ withTempDir(({ createTempDir }) => {
           createTempDir,
           contractMode: 'psl',
         });
-        composePgvector(ctx);
+        composePgvector(ctx, db.connectionString);
         swapPslContract(ctx, 'contract-extensions');
 
         const emit = await runContractEmit(ctx);
