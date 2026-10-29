@@ -10,10 +10,48 @@ import contractJson from '../fixtures/generated/contract.json' with { type: 'jso
 const contract = contractFromJson<Contract>(contractJson);
 const unreachable = 'mysql://root@127.0.0.1:1/none';
 
+const closed = { code: 'DRIVER.NOT_CONNECTED', message: 'MySQL client is closed' };
+const alreadyBound = { code: 'DRIVER.ALREADY_CONNECTED' };
+
 const rowsPlan = () => planFromAst(RawQueryAst.rows(['select 1 as one'], {}), contract);
 
 function client() {
   return mysql({ contract, url: unreachable });
+}
+
+function query(db: ReturnType<typeof client>) {
+  return db.query(rowsPlan()).toArray();
+}
+
+function startQueryIgnoringItsResult(db: ReturnType<typeof client>): void {
+  void query(db).catch(() => undefined);
+}
+
+async function stillPending(promise: Promise<unknown>): Promise<boolean> {
+  const marker = Symbol('pending');
+  const winner = await Promise.race([
+    promise.then(
+      () => undefined,
+      () => undefined,
+    ),
+    new Promise((resolve) => setTimeout(resolve, 0, marker)),
+  ]);
+  return winner === marker;
+}
+
+function driverConnectCalls() {
+  const calls = { count: 0 };
+  const createDriver = mysqlDriver.create.bind(mysqlDriver);
+  vi.spyOn(mysqlDriver, 'create').mockImplementationOnce((options) => {
+    const driver = createDriver(options);
+    const connect = driver.connect.bind(driver);
+    vi.spyOn(driver, 'connect').mockImplementation((binding) => {
+      calls.count += 1;
+      return connect(binding);
+    });
+    return driver;
+  });
+  return calls;
 }
 
 function driverConnectsWhenReleased() {
@@ -39,15 +77,99 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('connect() on a mysql() client', () => {
-  it('resolves with the runtime after a query connected the client', async () => {
+describe('connect() on a mysql() client that is not connected', () => {
+  it('binds the client to options and connects it', async () => {
+    const db = mysql({ contract });
+
+    await expect(db.connect({ url: unreachable })).resolves.toBe(db.runtime());
+    await db.close();
+  });
+});
+
+describe('connect() on a mysql() client that is connecting', () => {
+  it('waits for a connection connect() started, then resolves with the same runtime', async () => {
+    const release = driverConnectsWhenReleased();
     const db = client();
-    await db
-      .query(rowsPlan())
-      .toArray()
-      .catch(() => undefined);
+    const first = db.connect();
+    const second = db.connect();
+
+    expect(await stillPending(second)).toBe(true);
+    release({});
+    const [a, b] = await Promise.all([first, second]);
+    expect(a).toBe(b);
+    expect(a).toBe(db.runtime());
+    await db.close();
+  });
+
+  it('waits for a connection a query started, then resolves with the runtime', async () => {
+    const release = driverConnectsWhenReleased();
+    const db = client();
+    startQueryIgnoringItsResult(db);
+    const connected = db.connect();
+
+    expect(await stillPending(connected)).toBe(true);
+    release({});
+    await expect(connected).resolves.toBe(db.runtime());
+    await db.close();
+  });
+
+  it('rejects with the error of a connection connect() started', async () => {
+    const release = driverConnectsWhenReleased();
+    const db = client();
+    const first = db.connect();
+    const second = db.connect();
+    release({ error: new Error('connect failed') });
+
+    await expect(first).rejects.toThrow('connect failed');
+    await expect(second).rejects.toThrow('connect failed');
+  });
+
+  it('rejects with the error of a connection a query started, and a later connect() tries again', async () => {
+    const release = driverConnectsWhenReleased();
+    const db = client();
+    startQueryIgnoringItsResult(db);
+    const connected = db.connect();
+    release({ error: new Error('connect failed') });
+
+    await expect(connected).rejects.toThrow('connect failed');
+    await expect(db.connect()).resolves.toBe(db.runtime());
+    await db.close();
+  });
+
+  it('rejects options with DRIVER.ALREADY_CONNECTED', async () => {
+    const release = driverConnectsWhenReleased();
+    const db = client();
+    const first = db.connect();
+
+    await expect(db.connect({ url: unreachable })).rejects.toMatchObject(alreadyBound);
+    release({});
+    await first;
+    await db.close();
+  });
+
+  it('rejects every waiting call with DRIVER.NOT_CONNECTED when close() runs first', async () => {
+    const release = driverConnectsWhenReleased();
+    const db = client();
+    const first = db.connect();
+    const second = db.connect();
+    const closing = db.close();
+    release({});
+
+    await expect(first).rejects.toMatchObject(closed);
+    await expect(second).rejects.toMatchObject(closed);
+    await closing;
+  });
+});
+
+describe('connect() on a mysql() client that is connected', () => {
+  it('resolves with the runtime after a query connected the client', async () => {
+    const connectCalls = driverConnectCalls();
+    const db = client();
+    await expect(query(db)).rejects.toThrow();
+    expect(connectCalls.count).toBe(1);
 
     await expect(db.connect()).resolves.toBe(db.runtime());
+    expect(connectCalls.count).toBe(1);
     await db.close();
   });
 
@@ -59,47 +181,42 @@ describe('connect() on a mysql() client', () => {
     await db.close();
   });
 
-  it('waits for a connection in progress and resolves with the same runtime', async () => {
-    const release = driverConnectsWhenReleased();
+  it('treats connect(undefined) as connect()', async () => {
     const db = client();
-    const first = db.connect();
-    const second = db.connect();
-    release({});
+    const first = await db.connect();
 
-    const [a, b] = await Promise.all([first, second]);
-    expect(a).toBe(b);
-    expect(a).toBe(db.runtime());
+    await expect(db.connect(undefined)).resolves.toBe(first);
     await db.close();
   });
 
-  it('rejects with the error of the connection in progress when it fails', async () => {
-    const release = driverConnectsWhenReleased();
-    const db = client();
-    const first = db.connect();
-    const second = db.connect();
-    release({ error: new Error('connect failed') });
-
-    await expect(first).rejects.toThrow('connect failed');
-    await expect(second).rejects.toThrow('connect failed');
-  });
-
-  it('rejects options on a connected client with DRIVER.ALREADY_CONNECTED', async () => {
+  it('rejects options with DRIVER.ALREADY_CONNECTED', async () => {
     const db = client();
     await db.connect();
 
     await expect(db.connect({ url: unreachable })).rejects.toMatchObject({
       code: 'DRIVER.ALREADY_CONNECTED',
-      message: 'MySQL client already connected',
-      fix: 'Options were passed to a client that is already bound. Call connect() without options, or create a new client for another database.',
+      message: 'MySQL client is already bound',
+      why: 'connect() was given options after the client was bound to a database.',
+      fix: 'Call connect() without options, or create a new client for another database.',
+      meta: { extension: 'mysql' },
     });
     await db.close();
   });
+});
 
-  it('rejects after close() with DRIVER.NOT_CONNECTED', async () => {
+describe('connect() on a closed mysql() client', () => {
+  it('rejects with DRIVER.NOT_CONNECTED', async () => {
     const db = client();
     await db.connect();
     await db.close();
 
-    await expect(db.connect()).rejects.toMatchObject({ code: 'DRIVER.NOT_CONNECTED' });
+    await expect(db.connect()).rejects.toMatchObject(closed);
+  });
+
+  it('rejects options with DRIVER.NOT_CONNECTED', async () => {
+    const db = client();
+    await db.close();
+
+    await expect(db.connect({ url: unreachable })).rejects.toMatchObject(closed);
   });
 });

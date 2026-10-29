@@ -251,6 +251,11 @@ export default function mysql<
   let closed = false;
   let ownedDispose: (() => Promise<void>) | undefined;
 
+  const closedError = () =>
+    mysqlClientError('DRIVER.NOT_CONNECTED', 'MySQL client is closed', {
+      meta: { extension: 'mysql' },
+    });
+
   const connectDriver = async (resolvedBinding: MysqlBinding): Promise<void> => {
     if (driverConnected) return;
     if (!runtimeDriver) throw new InternalError('MySQL runtime driver missing');
@@ -270,9 +275,7 @@ export default function mysql<
 
   const getRuntime = (): Runtime => {
     if (closed) {
-      throw mysqlClientError('DRIVER.NOT_CONNECTED', 'MySQL client is closed', {
-        meta: { extension: 'mysql' },
-      });
+      throw closedError();
     }
 
     if (backgroundConnectError !== undefined) {
@@ -345,20 +348,20 @@ export default function mysql<
     },
     async connect(bindingInput) {
       if (closed) {
-        throw mysqlClientError('DRIVER.NOT_CONNECTED', 'MySQL client is closed', {
-          meta: { extension: 'mysql' },
-        });
+        throw closedError();
       }
 
       if (driverConnected || connectPromise) {
         if (bindingInput !== undefined) {
-          throw mysqlClientError('DRIVER.ALREADY_CONNECTED', 'MySQL client already connected', {
-            fix: 'Options were passed to a client that is already bound. Call connect() without options, or create a new client for another database.',
+          throw mysqlClientError('DRIVER.ALREADY_CONNECTED', 'MySQL client is already bound', {
+            why: 'connect() was given options after the client was bound to a database.',
+            fix: 'Call connect() without options, or create a new client for another database.',
             meta: { extension: 'mysql' },
           });
         }
         const runtime = getRuntime();
         await connectPromise;
+        if (closed) throw closedError();
         return runtime;
       }
 
@@ -382,6 +385,7 @@ export default function mysql<
       }
 
       await connectDriver(binding);
+      if (closed) throw closedError();
       return runtime;
     },
     runtime() {
