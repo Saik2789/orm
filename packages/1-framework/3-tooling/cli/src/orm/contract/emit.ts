@@ -75,7 +75,9 @@ export function createContractEmitCommand({ executeContractEmit }: ContractEmitC
         'Reads your contract source (TypeScript or Prisma schema) and emits\n' +
         'contract.json and contract.d.ts. The contract.json contains the canonical\n' +
         'contract structure, and contract.d.ts provides TypeScript types for\n' +
-        'type-safe query building. Offline — does not consult the database.',
+        'type-safe query building. It also writes each composed extension\n' +
+        "pack's pinned files under migrations/<space-id>/. Offline — does not\n" +
+        'consult the database.',
       examples: [
         'contract emit',
         'contract emit --output-path ./generated',

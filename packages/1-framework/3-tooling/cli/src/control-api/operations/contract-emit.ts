@@ -7,8 +7,10 @@ import { abortable } from '@internal/utils/abortable';
 import { ifDefined } from '@internal/utils/defined';
 import type { JsonObject } from '@internal/utils/json';
 import { dirname, join } from 'pathe';
+import { migrationsDirFor } from '../../orm/migration/paths';
 import { errorContractConfigMissing } from '../../utils/cli-errors';
 import { queueEmitByOutput } from '../../utils/emit-queue';
+import { toExtensionInputs } from '../../utils/extension-pack-inputs';
 import { createProjectSpecifierResolver } from '../../utils/project-import-root';
 import { publishContractArtifactPair } from '../../utils/publish-contract-artifact-pair';
 import { validateContractDeps } from '../../utils/validate-contract-deps';
@@ -18,6 +20,7 @@ import type {
   ControlActionName,
   OnControlProgress,
 } from '../types';
+import { runContractSpaceSeedPhase } from './contract-space-seed-phase';
 import {
   loadContractSourceWithStack,
   requireContractConfig,
@@ -53,6 +56,10 @@ function endSpan(
  * (`prisma contract emit`) and the Vite plugin
  * (`@internal/vite-plugin-contract-emit`). New callers must go through this
  * function rather than re-implementing load → emit → publish.
+ *
+ * After publishing, it writes each composed extension pack's pinned files
+ * under `migrations/<space-id>/`, as `migration plan` does, so a project
+ * that never plans a migration can still sign its database.
  *
  * The whole flow (load config → resolve source → emit bytes → atomic publish)
  * is serialized per output JSON path via `queueEmitByOutput`. Concurrent calls
@@ -172,6 +179,11 @@ export async function executeContractEmit(
       contractJson: emitResult.contractJson,
       contractDts: emitResult.contractDts,
       publicationToken: String(process.hrtime.bigint()),
+    });
+
+    await runContractSpaceSeedPhase({
+      migrationsDir: migrationsDirFor(config, cwd),
+      extensions: toExtensionInputs(config.extensions ?? []),
     });
 
     const validationWarning = validateContractDeps(

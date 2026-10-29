@@ -70,7 +70,8 @@ export interface ContractSpaceSeedPhaseResult {
 }
 
 /**
- * Phase-1 of the two-phase `migration plan` pipeline (sub-spec § 4).
+ * Phase-1 of the two-phase `migration plan` pipeline (sub-spec § 4), and the
+ * step of `contract emit` that writes each pack's pinned files.
  *
  * For every extension that exposes a `contractSpace`:
  *

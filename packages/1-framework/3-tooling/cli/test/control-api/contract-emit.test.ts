@@ -495,6 +495,51 @@ describe('executeContractEmit', () => {
     expect(mockedEmit.mock.calls.at(-1)?.[3]?.supportsNamespaces).toBe(false);
   });
 
+  it('writes each composed pack space under the migrations directory', async () => {
+    const config = createSuccessfulConfig(join(tmpDir, 'src/contract.json'));
+    const packHash = 'a'.repeat(64);
+    const pack = {
+      kind: 'extension',
+      id: 'testpack',
+      version: '0.0.1',
+      familyId: 'test-family',
+      targetId: 'test-target',
+      contractSpace: {
+        contractJson: { storage: { storageHash: packHash } },
+        headRef: { hash: packHash, invariants: [] },
+        migrations: [
+          {
+            dirName: '20260101T0000_create_testpack',
+            metadata: {
+              from: null,
+              to: packHash,
+              migrationHash: 'mh',
+              providedInvariants: [],
+              createdAt: '2026-01-01T00:00:00.000Z',
+            },
+            ops: [],
+          },
+        ],
+      },
+    };
+    mockedEmit.mockResolvedValueOnce(createEmitResult('pack'));
+
+    await executeContractEmitWithMock(
+      emitOptions({ ...config, extensions: [pack] } as unknown as typeof config),
+    );
+
+    const spaceDir = join(tmpDir, 'migrations', 'testpack');
+    expect(JSON.parse(await readFile(join(spaceDir, 'refs', 'head.json'), 'utf-8'))).toEqual({
+      hash: packHash,
+      invariants: [],
+    });
+    expect(
+      JSON.parse(
+        await readFile(join(spaceDir, '20260101T0000_create_testpack', 'migration.json'), 'utf-8'),
+      ),
+    ).toMatchObject({ from: null, to: packHash });
+  });
+
   describe('the import root the emitted files are written against', () => {
     async function emitInto(project: string, options: { readonly namesConfig: boolean }) {
       const outputJsonPath = join(tmpDir, project, 'generated/contract.json');
