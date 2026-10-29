@@ -13,6 +13,9 @@ import { fileURLToPath } from 'node:url';
 import postgresAdapter from '@internal/adapter-postgres/control';
 import type { Contract } from '@internal/contract/types';
 import postgresDriver from '@internal/driver-postgres/control';
+import paradedb from '@internal/extension-paradedb/control';
+import pgvector from '@internal/extension-pgvector/control';
+import postgis from '@internal/extension-postgis/control';
 import sql from '@internal/family-sql/control';
 import { createControlStack } from '@internal/framework-components/control';
 import type { SqlStorage } from '@internal/sql-contract/types';
@@ -115,10 +118,18 @@ function schemaPathOf(fixture: string): string {
   return existsSync(directory) ? directory : join(fixturesDir, fixture, 'schema.prisma');
 }
 
-/** The extension pack ids the fixture's `composed-extensions.json` lists, which the reader takes as composed. */
-function composedExtensionsOf(fixture: string): readonly string[] {
+const extensionPacks = new Map([pgvector, postgis, paradedb].map((pack) => [pack.id, pack]));
+
+/** The extension packs the fixture's `composed-extensions.json` lists, which the stack composes. */
+function composedExtensionsOf(fixture: string) {
   const path = join(fixturesDir, fixture, 'composed-extensions.json');
-  return existsSync(path) ? (JSON.parse(readFileSync(path, 'utf8')) as string[]) : [];
+  const packIds: readonly string[] = existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')) : [];
+  return packIds.map((packId) => {
+    const pack = extensionPacks.get(packId);
+    if (pack === undefined)
+      throw new Error(`Fixture "${fixture}" composes unknown pack "${packId}"`);
+    return pack;
+  });
 }
 
 async function interpret(fixture: string): Promise<Contract<SqlStorage>> {
@@ -128,11 +139,11 @@ async function interpret(fixture: string): Promise<Contract<SqlStorage>> {
     target: postgres,
     adapter: postgresAdapter,
     driver: postgresDriver,
-    extensions: [],
+    extensions: composedExtensionsOf(fixture),
   });
   const loaded = await prisma7Contract(schemaPath, { binding: prisma7PostgresBinding }).source.load(
     {
-      composedExtensions: composedExtensionsOf(fixture),
+      composedExtensions: stack.extensions.map((extension) => extension.id),
       defaultNamespaceId: stack.target.defaultNamespaceId,
       composedExtensionContracts: stack.extensionContracts,
       authoringContributions: stack.authoringContributions,

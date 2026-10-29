@@ -47,12 +47,29 @@ export function composedExtensionsOf(caseDirectory: string): readonly string[] {
   return existsSync(path) ? (JSON.parse(readFileSync(path, 'utf8')) as string[]) : [];
 }
 
-/** `context` with the extension packs whose ids are `packIds` composed as well. */
+const extensionPacksDir = join(fixturesDir, '../../../../../3-extensions');
+
+/** The contract the extension pack `packId` publishes, read from the pack's `src/contract.json`. */
+export function packContract(packId: string): Contract {
+  const path = join(extensionPacksDir, packId, 'src/contract.json');
+  return new PostgresContractSerializer().deserializeContract(
+    JSON.parse(readFileSync(path, 'utf8')),
+  );
+}
+
+/** `context` with the extension packs whose ids are `packIds` composed as well, each with the contract it publishes. */
 export function withComposedExtensions(
   context: ContractSourceContext,
   packIds: readonly string[],
 ): ContractSourceContext {
-  return { ...context, composedExtensions: [...context.composedExtensions, ...packIds] };
+  return {
+    ...context,
+    composedExtensions: [...context.composedExtensions, ...packIds],
+    composedExtensionContracts: new Map([
+      ...context.composedExtensionContracts,
+      ...packIds.map((packId): [string, Contract] => [packId, packContract(packId)]),
+    ]),
+  };
 }
 
 /** The Postgres composition with one default function unregistered. */
@@ -137,6 +154,7 @@ export function interpretSchemaTextResult(
   text: string,
   binding: Prisma7TargetBinding = prisma7PostgresBinding,
   composedPacks: ReadonlyMap<string, Contract> = new Map(),
+  defaultNamespaceId = postgresSourceContext(['schema.prisma']).defaultNamespaceId,
 ) {
   const context = postgresSourceContext(['schema.prisma']);
   const { document, sources } = parse(text, 'schema.prisma', { grammar: 'prisma-7' });
@@ -150,7 +168,7 @@ export function interpretSchemaTextResult(
       },
     ],
     seedDiagnostics: [],
-    defaultNamespaceId: context.defaultNamespaceId,
+    defaultNamespaceId,
     binding,
     controlMutationDefaults: context.controlMutationDefaults,
     generatorFunctions: context.generatorFunctions,

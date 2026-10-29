@@ -95,7 +95,11 @@ import {
   unmappedFieldDiagnostics,
   unmappedFieldInPrimaryKey,
 } from './diagnostics';
-import { type DatasourceExtension, readDatasourceExtensions } from './extensions';
+import {
+  type DatasourceExtension,
+  type DeclaringPack,
+  readDatasourceExtensions,
+} from './extensions';
 import { type IndexAttribute, indexNode, parseIndexAttribute } from './indexes';
 import { prisma7NativeTypeMapping, prisma7ScalarMapping } from './native-types';
 import {
@@ -445,9 +449,9 @@ export function interpretPrisma7Documents(
       generators,
       binding: binding.extensions,
       composedExtensions: new Set(input.composedExtensions),
-      packNamespace: (packId, extensionName) =>
-        namespaceDeclaring(
-          input.composedExtensionContracts.get(packId),
+      declaringPack: (extensionName) =>
+        packDeclaring(
+          input.composedExtensionContracts,
           binding.extensions.entityKind,
           extensionName,
         ),
@@ -951,15 +955,17 @@ function readEnumDeclaration(
   return { name: block.name, typeName, namespaceId, members, span: block.span, sourceId };
 }
 
-function namespaceDeclaring(
-  contract: Contract | undefined,
+function packDeclaring(
+  packContracts: ReadonlyMap<string, Contract>,
   entityKind: string,
   name: string,
-): string | undefined {
-  const namespaces = Object.entries(contract?.storage.namespaces ?? {});
-  return namespaces.find(([, namespace]) =>
-    Object.hasOwn(namespace.entries[entityKind] ?? {}, name),
-  )?.[0];
+): DeclaringPack | undefined {
+  for (const [packId, contract] of packContracts) {
+    for (const [namespaceId, namespace] of Object.entries(contract.storage.namespaces)) {
+      if (Object.hasOwn(namespace.entries[entityKind] ?? {}, name)) return { packId, namespaceId };
+    }
+  }
+  return undefined;
 }
 
 function entityContext(

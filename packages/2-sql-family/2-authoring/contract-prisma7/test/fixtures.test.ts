@@ -62,6 +62,7 @@ describe('Prisma 7 fixtures', () => {
       'extensions-no-pack',
       'extensions-pack-composed',
       'extensions-pack-missing',
+      'extensions-pack-schema-mismatch',
       'extensions-preview-feature-missing',
       'extensions-schema',
       'extensions-version-refused',

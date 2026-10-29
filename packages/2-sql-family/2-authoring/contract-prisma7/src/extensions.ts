@@ -32,13 +32,18 @@ export interface DatasourceExtension {
   readonly sourceId: string;
 }
 
+export interface DeclaringPack {
+  readonly packId: string;
+  readonly namespaceId: string;
+}
+
 export interface ReadDatasourceExtensionsInput {
   readonly datasource: Prisma7SchemaBlock;
   readonly generators: readonly Prisma7SchemaBlock[];
   readonly binding: Prisma7DatabaseExtensions;
   readonly composedExtensions: ReadonlySet<string>;
-  /** The namespace a composed pack's contract declares the extension in; `undefined` when it declares none. */
-  readonly packNamespace: (packId: string, extensionName: string) => string | undefined;
+  /** The composed pack whose contract declares the extension, and the namespace it declares it in. */
+  readonly declaringPack: (extensionName: string) => DeclaringPack | undefined;
   readonly defaultNamespaceId: string;
   readonly diagnostics: ContractSourceDiagnostic[];
 }
@@ -73,7 +78,7 @@ function text(node: { readonly syntax: SyntaxNode }): string {
 }
 
 /**
- * The datasource `extensions` list: each listed extension no pack declares, in the namespace of its `schema:` argument or the default one. An extension a composed pack declares is left to that pack; one whose pack is not composed, and arguments the contract cannot describe, are reported.
+ * The datasource `extensions` list: each listed extension no composed pack's contract declares, in the namespace of its `schema:` argument or the default one. An extension a composed pack's contract declares is left to that pack; one the binding names a pack for that is not composed, and arguments the contract cannot describe, are reported.
  */
 export function readDatasourceExtensions(
   input: ReadDatasourceExtensionsInput,
@@ -123,28 +128,29 @@ export function readDatasourceExtensions(
     }
     const schema = readArguments(name, call, input);
     const namespaceId = schema ?? input.defaultNamespaceId;
-    const pack = Object.hasOwn(binding.packs, name) ? binding.packs[name] : undefined;
-    if (pack !== undefined) {
-      if (input.composedExtensions.has(pack.id)) {
-        const packNamespace = input.packNamespace(pack.id, name);
-        if (packNamespace !== undefined && packNamespace !== namespaceId) {
-          const edit =
-            schema === undefined
-              ? `write ${name}(schema: "${packNamespace}")`
-              : packNamespace === input.defaultNamespaceId
-                ? `remove schema: "${schema}"`
-                : `write schema: "${packNamespace}"`;
-          diagnostics.push(
-            prisma7Diagnostic(
-              'PSL.PRISMA7_EXTENSION_SCHEMA_MISMATCH',
-              `Extension "${name}": the "${pack.id}" extension pack declares it in schema "${packNamespace}", so Prisma 8 expects it there, but this entry puts it in schema "${namespaceId}". Moving it is a database change the pack does not make: move it with ALTER EXTENSION "${name}" SET SCHEMA "${packNamespace}", then ${edit}.`,
-              sourceId,
-              span,
-            ),
-          );
-        }
-        continue;
+    const declaring = input.declaringPack(name);
+    if (declaring !== undefined) {
+      if (declaring.namespaceId !== namespaceId) {
+        const packNamespace = declaring.namespaceId;
+        const edit =
+          schema === undefined
+            ? `write ${name}(schema: "${packNamespace}")`
+            : packNamespace === input.defaultNamespaceId
+              ? `remove schema: "${schema}"`
+              : `write schema: "${packNamespace}"`;
+        diagnostics.push(
+          prisma7Diagnostic(
+            'PSL.PRISMA7_EXTENSION_SCHEMA_MISMATCH',
+            `Extension "${name}": the "${declaring.packId}" extension pack declares it in schema "${packNamespace}", so Prisma 8 expects it there, but this entry puts it in schema "${namespaceId}". Moving it is a database change the pack does not make: move it with ALTER EXTENSION "${name}" SET SCHEMA "${packNamespace}", then ${edit}.`,
+            sourceId,
+            span,
+          ),
+        );
       }
+      continue;
+    }
+    const pack = Object.hasOwn(binding.packs, name) ? binding.packs[name] : undefined;
+    if (pack !== undefined && !input.composedExtensions.has(pack.id)) {
       diagnostics.push(
         prisma7Diagnostic(
           'PSL.PRISMA7_EXTENSION_PACK_MISSING',

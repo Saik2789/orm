@@ -1,3 +1,5 @@
+import type { Contract } from '@internal/contract/types';
+import type { SqlStorage } from '@internal/sql-contract/types';
 import { prisma7PostgresBinding } from '@internal/target-postgres/prisma7-binding';
 import { describe, expect, it } from 'vitest';
 import { interpretSchemaText, interpretSchemaTextResult, serializedNamespaces } from './support';
@@ -120,6 +122,76 @@ generator other {
           'datasource "db": extensions is pg_trgm, which is not a list, and Prisma 7 refuses it too. List each extension by name, such as extensions = [pg_trgm].',
       },
     ]);
+  });
+
+  describe('which space declares a listed extension', () => {
+    const packless = {
+      ...prisma7PostgresBinding,
+      extensions: { ...prisma7PostgresBinding.extensions, packs: {} },
+    };
+
+    it('leaves an extension to a composed pack the binding does not name when its contract declares it', () => {
+      const result = interpretSchemaTextResult(
+        schemaListing('[vector]'),
+        packless,
+        pgvectorDeclaringIn('public'),
+      );
+      if (!result.ok) throw new Error(JSON.stringify(result.failure.diagnostics));
+      expect(
+        serializedNamespaces(result.value as Contract<SqlStorage>)['public']?.entries['extension'],
+      ).toBeUndefined();
+    });
+
+    it('declares an extension in the application when the composed pack the binding names does not declare it', () => {
+      const result = interpretSchemaTextResult(
+        schemaListing('[vector]'),
+        prisma7PostgresBinding,
+        new Map([['pgvector', interpretSchemaText(schemaListing('[]'))]]),
+      );
+      if (!result.ok) throw new Error(JSON.stringify(result.failure.diagnostics));
+      expect(
+        serializedNamespaces(result.value as Contract<SqlStorage>)['public']?.entries['extension'],
+      ).toEqual({ vector: { kind: 'extension', name: 'vector' } });
+    });
+
+    it('checks the schema of a composed pack the binding does not name', () => {
+      const result = interpretSchemaTextResult(
+        schemaListing('[vector(schema: "extensions")]'),
+        packless,
+        pgvectorDeclaringIn('public'),
+      );
+      if (result.ok) throw new Error('The schema interpreted to a contract');
+      expect(result.failure.diagnostics.map(({ code }) => code)).toEqual([
+        'PSL.PRISMA7_EXTENSION_SCHEMA_MISMATCH',
+      ]);
+    });
+  });
+
+  describe('an extension without schema:', () => {
+    it('is declared in the default namespace', () => {
+      const result = interpretSchemaTextResult(
+        schemaListing('[pg_trgm]'),
+        prisma7PostgresBinding,
+        new Map(),
+        'app',
+      );
+      if (!result.ok) throw new Error(JSON.stringify(result.failure.diagnostics));
+      const namespaces = serializedNamespaces(result.value as Contract<SqlStorage>);
+      expect(namespaces['app']?.entries['extension']).toEqual({
+        pg_trgm: { kind: 'extension', name: 'pg_trgm' },
+      });
+      expect(namespaces['public']?.entries['extension']).toBeUndefined();
+    });
+
+    it('matches a pack that declares it in the default namespace', () => {
+      const result = interpretSchemaTextResult(
+        schemaListing('[vector]'),
+        prisma7PostgresBinding,
+        pgvectorDeclaringIn('app'),
+        'app',
+      );
+      expect(result.ok).toBe(true);
+    });
   });
 
   describe('an extension a composed pack declares', () => {
