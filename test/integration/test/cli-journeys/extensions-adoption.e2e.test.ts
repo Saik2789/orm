@@ -1,9 +1,8 @@
 /**
  * Adopting a database that has two Postgres extensions: `pg_trgm`, which the app contract declares, and `vector`, which the composed pgvector pack declares. `contract emit` writes the pack's pinned files, `db sign` writes both markers without running a migration, and `db verify --strict` is clean. A later app change migrates with `db migrate`, and a fresh database built from `migrations/` alone ends up with both extensions.
  */
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import pgvector from '@internal/extension-pgvector/control';
 import { withClient, withDevDatabase } from '@repo/test-utils';
 import stripAnsi from 'strip-ansi';
 import { describe, expect, it } from 'vitest';
@@ -49,10 +48,20 @@ async function installedExtensions(connectionString: string): Promise<readonly s
   });
 }
 
-const pgvectorSpace = pgvector.contractSpace!;
-const pgvectorOneStepMigration = pgvectorSpace.migrations.find(
-  (m) => m.metadata.from === null && m.metadata.to === pgvectorSpace.headRef.hash,
-)?.dirName;
+function pinnedPgvector(testDir: string): {
+  readonly head: string;
+  readonly oneStep: string | undefined;
+} {
+  const dir = join(testDir, 'migrations', 'pgvector');
+  const head: string = JSON.parse(readFileSync(join(dir, 'refs', 'head.json'), 'utf-8')).hash;
+  const oneStep = readdirSync(dir)
+    .filter((name) => existsSync(join(dir, name, 'migration.json')))
+    .find((name) => {
+      const metadata = JSON.parse(readFileSync(join(dir, name, 'migration.json'), 'utf-8'));
+      return metadata.from === null && metadata.to === head;
+    });
+  return { head, oneStep };
+}
 
 async function markers(
   connectionString: string,
@@ -99,11 +108,13 @@ withTempDir(({ createTempDir }) => {
         const pgvectorDir = join(ctx.testDir, 'migrations', 'pgvector');
         expect(existsSync(join(pgvectorDir, 'refs', 'head.json'))).toBe(true);
 
+        const pinned = pinnedPgvector(ctx.testDir);
+
         const sign = await runDbSign(ctx);
         expect(sign.exitCode, `db sign\n${output(sign)}`).toBe(0);
         expect(await markers(db.connectionString)).toEqual({
           app: { hash: expect.any(String), invariants: [] },
-          pgvector: { hash: pgvectorSpace.headRef.hash, invariants: [] },
+          pgvector: { hash: pinned.head, invariants: [] },
         });
         const verify = await runDbVerify(ctx, ['--strict']);
         expect(verify.exitCode, `db verify --strict\n${output(verify)}`).toBe(0);
@@ -122,13 +133,11 @@ withTempDir(({ createTempDir }) => {
           const fresh = await runMigrate(ctx, ['--db', connectionString]);
           expect(fresh.exitCode, `db migrate on a fresh database\n${output(fresh)}`).toBe(0);
           expect(await installedExtensions(connectionString)).toEqual(['pg_trgm', 'vector']);
-          expect(pgvectorOneStepMigration).toBeDefined();
-          expect(await appliedMigrations(connectionString, 'pgvector')).toEqual([
-            pgvectorOneStepMigration,
-          ]);
+          expect(pinned.oneStep).toBeDefined();
+          expect(await appliedMigrations(connectionString, 'pgvector')).toEqual([pinned.oneStep]);
           expect(await markers(connectionString)).toEqual({
             app: { hash: expect.any(String), invariants: [] },
-            pgvector: { hash: pgvectorSpace.headRef.hash, invariants: [] },
+            pgvector: { hash: pinned.head, invariants: [] },
           });
           const verifyFresh = await runDbVerify(ctx, ['--strict', '--db', connectionString]);
           expect(verifyFresh.exitCode, `db verify --strict\n${output(verifyFresh)}`).toBe(0);
