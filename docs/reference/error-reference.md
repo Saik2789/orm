@@ -1849,7 +1849,7 @@ After applying migrations, the runner introspected the database and the resultin
 
 ### MIGRATION.SIGN_INVARIANTS_MISSING
 
-A diagnostic in `db sign`, one per refused space: the space's head ref requires data invariants that its database marker does not record, or the space has no marker at all. An invariant records that a migration ran, and `db sign` never runs migrations, so it cannot provide one. The refused space is reported with status `missing-invariants`; its marker and ref are left as they were. Every other space that verifies is signed as usual, and the command exits with code 4. The next action is `db migrate`, which runs the migrations that provide the invariants. Payload: `space`, `missingInvariants` (the missing ids, sorted).
+A diagnostic in `db sign`, one per refused extension space: the space's head ref requires invariants that its database marker does not record. A space with no marker is refused only when its head ref lists invariants, and the application space is never refused, because its head ref is the emitted contract, which lists none. An invariant records that a migration ran, and `db sign` never runs migrations, so it cannot provide one. The refused space is reported with status `missing-invariants`; no marker, snapshot or `db` ref is written for it. When its schema also fails verification, that finding is reported with it. Every other space that verifies is signed as usual, and the command exits with code 4. The next action is `db migrate`, which runs the migrations that provide the invariants. Payload: `space`, `missingInvariants` (the missing ids, sorted).
 
 ### MIGRATION.SIGN_REFS_NOT_WRITTEN
 
