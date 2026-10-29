@@ -1425,7 +1425,9 @@ A parameterized codec's `paramsSchema` rejected the `typeParams` carried by a co
 
 ### DRIVER.ALREADY_CONNECTED
 
-Calling `connect(binding)` on a driver, or `connect()` on a client (`postgres()`, `sqlite()`, `mongo()`) or the CLI control client, when it is already connected. Close with `close()` before reconnecting with a new binding. Payload: `bindingKind`.
+Calling `connect(binding)` on a driver, or `connect()` on the CLI control client, when it is already connected. Close with `close()` before reconnecting with a new binding. Payload: `bindingKind`.
+
+On a client (`postgres()`, `sqlite()`, `mysql()`, `mongo()`), it means options were passed to `connect(options)` after the client was bound, while it is connecting or connected. A client never changes its database, and it does not compare the options with the ones it uses. `connect()` without options does not raise it: it waits for the connection in progress, or resolves with the runtime. A closed client cannot reconnect; it raises `DRIVER.NOT_CONNECTED`, so create a new client.
 
 ### DRIVER.CONNECTION_FAILED
 
