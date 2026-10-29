@@ -89,6 +89,7 @@ import {
   type LoweredPackEntity,
   providesPslEntityPlacement,
   type ResolvedPslModelRefs,
+  requiresNameUniqueAcrossNamespaces,
 } from '@internal/sql-contract/entity-handle-lowering-hook';
 import { FOREIGN_KEY_INDEX_UNRESOLVED } from '@internal/sql-contract/foreign-key-materialization';
 import { isAuthoredIndexInput } from '@internal/sql-contract/index-naming';
@@ -2449,6 +2450,29 @@ export function interpretPslDocumentToSqlContract(
       ),
       extensionBlocks,
     );
+  }
+  for (const descriptor of entityTypesByDiscriminator.values()) {
+    if (!requiresNameUniqueAcrossNamespaces(descriptor.output)) continue;
+    const namespacesByName = new Map<string, string[]>();
+    for (const [namespaceId, entities] of namespaceExtensionEntities) {
+      for (const name of Object.keys(entities[descriptor.discriminator] ?? {})) {
+        namespacesByName.set(name, [...(namespacesByName.get(name) ?? []), namespaceId]);
+      }
+    }
+    for (const [name, namespaceIds] of namespacesByName) {
+      if (namespaceIds.length < 2) continue;
+      const sorted = [...namespaceIds].sort();
+      const block = [...extensionBlocksByNamespace]
+        .filter(([namespace]) => namespace.id === sorted[sorted.length - 1])
+        .flatMap(([, blocks]) => Object.values(blocks))
+        .find((candidate) => candidate.name === name);
+      invariant(block !== undefined, 'A lowered entity has an owning block');
+      diagnostics.pushUnlocated({
+        code: 'PSL_ENTITY_DECLARED_IN_MANY_NAMESPACES',
+        message: `${descriptor.discriminator} "${name}" is declared in namespaces ${sorted.map((namespaceId) => `"${namespaceId}"`).join(' and ')}; declare it in one namespace only.`,
+        ...diagnosticSource(input.sources, block.node.syntax).at(),
+      });
+    }
   }
 
   // A domain `enum` and an extension-derived value-set (e.g. from a
