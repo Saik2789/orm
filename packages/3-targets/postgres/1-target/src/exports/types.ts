@@ -24,6 +24,10 @@ export {
   type PostgresDatabaseSchemaNodeInput,
 } from '../core/schema-ir/postgres-database-schema-node';
 export {
+  PostgresExtensionSchemaNode,
+  type PostgresExtensionSchemaNodeInput,
+} from '../core/schema-ir/postgres-extension-schema-node';
+export {
   PostgresNamespaceSchemaNode,
   type PostgresNamespaceSchemaNodeInput,
 } from '../core/schema-ir/postgres-namespace-schema-node';
