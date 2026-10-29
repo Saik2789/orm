@@ -56,7 +56,7 @@ Copy the `native_enum` kind's path through the code; the paths below are under `
   ```
 
 - **TypeScript builder:** `extension(name)` in the Postgres contract builder, placed in a namespace the way the builder places a native enum.
-- **Reading the database:** the Postgres control adapter reads `pg_extension` joined to `pg_namespace` into a new schema node kind on the namespace node of the extension's schema, as it reads native enums.
+- **Reading the database:** the Postgres control adapter reads `pg_extension` joined to `pg_namespace` into a new schema node kind on the database root, carrying the extension's schema. On the root a node pairs by name, so an extension moved to another schema is one difference and plans `SET SCHEMA`; under namespace nodes it would be one missing and one extra node.
 - **Verification:**
   - A declared extension that is missing fails, in both modes.
   - An extension declared in one namespace and installed in another fails as an incompatible declaration.
@@ -68,7 +68,7 @@ Copy the `native_enum` kind's path through the code; the paths below are under `
   - A removed extension plans `DROP EXTENSION` without `CASCADE`, classed destructive.
   - An extension moved to another namespace plans `ALTER EXTENSION … SET SCHEMA`.
   - Extension operations run before any type, table or index operation, in the existing `dep` bucket.
-- **`contract infer` and `contract print`** write extension blocks, and the printer round-trips them. `contract infer` writes every extension except `plpgsql`.
+- **`contract infer` and `contract print`** write extension blocks, and the printer round-trips them. `contract infer` writes every extension except `plpgsql` and those a composed pack declares.
 
 ### Extension packs
 
