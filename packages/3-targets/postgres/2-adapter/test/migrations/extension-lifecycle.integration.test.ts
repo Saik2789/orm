@@ -72,9 +72,11 @@ const ALLOW_DESTRUCTIVE: MigrationOperationPolicy = {
 
 function contractFromPsl(psl: string): Contract<SqlStorage> {
   const assembled = assembleAuthoringContributions([postgresTargetDescriptor]);
+  const scalarTypeDescriptors: ReadonlyMap<string, { codecId: string }> =
+    collectScalarTypeConstructors(postgresScalarAuthoringTypes);
   const scalarTypeConstructors: Record<string, AuthoringTypeConstructorDescriptor> =
     Object.fromEntries(
-      [...collectScalarTypeConstructors(postgresScalarAuthoringTypes)].map(([name, output]) => [
+      [...scalarTypeDescriptors].map(([name, output]) => [
         name,
         { kind: 'typeConstructor' as const, output },
       ]),
