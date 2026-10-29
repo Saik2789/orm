@@ -18,7 +18,6 @@ import {
   type SqlTableIR,
 } from '@internal/sql-schema-ir/types';
 import {
-  postgresAuthoringFieldPresets,
   postgresAuthoringPslBlockDescriptors,
   postgresAuthoringTypes,
 } from '../../src/core/authoring';
@@ -61,7 +60,7 @@ export function reportedFromWritten(
   const [resolved] = resolveWrittenSqlTypes(typeText, postgresDataTypes);
   const text =
     resolved !== undefined && resolved.dataType.sql.claimsKind === undefined
-      ? renderSqlCatalogText(resolved.dataType, resolved.typeParams)
+      ? renderSqlCatalogText(resolved.dataType, resolved.writtenTypeParams)
       : typeText;
   return { text, kind: undefined, schema: 'pg_catalog', name: undefined };
 }
@@ -146,7 +145,7 @@ export function inferFromFixtureTree(
 export function inferredColumnTypesOf(
   tables: Readonly<Record<string, SqlTableIR>>,
   enums: FixtureEnums = new Map(),
-): ColumnTypeOf {
+): Promise<ColumnTypeOf> {
   return inferColumnTypes({
     tables: Object.values(tables).map((table) => ({
       schemaName: 'public',
@@ -158,8 +157,10 @@ export function inferredColumnTypesOf(
       codecLookup: inferBuildContext.codecLookup,
       dataTypeLookup: inferBuildContext.dataTypes.lookup,
     }),
+    authoringTypes: inferBuildContext.authoringContributions.type,
     dataTypes: inferBuildContext.dataTypes,
     isEnumColumn: (column) => column.reportedType?.kind === 'enum',
+    readsDefault: undefined,
   });
 }
 
@@ -214,6 +215,8 @@ export function treeFromFlat(schemaIR: SqlSchemaIR): PostgresDatabaseSchemaNode 
   });
 }
 
+const inferCodecLookup = createPostgresBuiltinCodecLookup();
+
 /**
  * The stack `contract emit` reads an inferred schema with: the type constructors the family and the
  * adapter contribute, the target's own, and the target's codecs and data types.
@@ -225,15 +228,14 @@ export const inferBuildContext: SqlPslBuildContext = {
       ...postgresAuthoringTypes,
       ...postgresScalarAndNativeTypeConstructors,
     },
-    field: postgresAuthoringFieldPresets,
   },
   generatorFunctions: EMPTY_GENERATOR_FUNCTIONS,
   componentIdsByGenerator: new Map(),
-  codecLookup: createPostgresBuiltinCodecLookup(),
+  codecLookup: inferCodecLookup,
   dataTypes: {
     entries: postgresDataTypeEntries(),
     lookup: createDataTypeLookup(postgresDataTypes),
-    dataTypeOfCodec: () => undefined,
+    dataTypeOfCodec: (codecId) => inferCodecLookup.descriptorFor(codecId)?.dataType,
   },
 };
 

@@ -38,7 +38,6 @@ import type {
   NamespaceId,
   ProfileHashBase,
   StorageHashBase,
-  ValueObjectTypesFromDomain,
 } from '@internal/contract/types';
 
 export type StorageHash =
@@ -295,36 +294,23 @@ type DefaultLiteralValue<CodecId extends string, Encoded> = CodecId extends keyo
   : Encoded;
 type ParameterizedOutputTypeFunctions =
   PgParameterizedOutputTypes | PgVectorParameterizedOutputTypes;
-type ValueObjectOutputTypes = ValueObjectTypesFromDomain<
-  ContractBase['domain']['namespaces'],
-  CodecTypes,
-  ParameterizedOutputTypeFunctions,
-  FieldTypeOverrides,
-  'output'
->;
-type ValueObjectInputTypes = ValueObjectTypesFromDomain<
-  ContractBase['domain']['namespaces'],
-  CodecTypes,
-  ParameterizedOutputTypeFunctions,
-  FieldTypeOverrides,
-  'input'
->;
-export type AddressOutput = ValueObjectOutputTypes['public']['Address'];
-export type AddressInput = ValueObjectInputTypes['public']['Address'];
+
 type FieldTypeOverrides = {};
 export type FieldOutputTypes = FieldTypesFromDomain<
   ContractBase['domain']['namespaces'],
   CodecTypes,
   ParameterizedOutputTypeFunctions,
   FieldTypeOverrides,
-  'output'
+  'output',
+  ContractBase['storage']['namespaces']
 >;
 export type FieldInputTypes = FieldTypesFromDomain<
   ContractBase['domain']['namespaces'],
   CodecTypes,
   ParameterizedOutputTypeFunctions,
   FieldTypeOverrides,
-  'input'
+  'input',
+  ContractBase['storage']['namespaces']
 >;
 type ColumnTypeOverrides = {};
 export type StorageColumnTypes = ColumnTypesFromStorage<
@@ -1187,7 +1173,7 @@ type ContractBase = Omit<
             readonly fields: {
               readonly address: {
                 readonly nullable: true;
-                readonly type: { readonly kind: 'valueObject'; readonly name: 'Address' };
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/jsonb@1' };
               };
               readonly email: {
                 readonly nullable: false;
@@ -1353,24 +1339,6 @@ type ContractBase = Omit<
             };
           };
         };
-        readonly valueObjects: {
-          readonly Address: {
-            readonly fields: {
-              readonly city: {
-                readonly nullable: false;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
-              };
-              readonly street: {
-                readonly nullable: false;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
-              };
-              readonly zip: {
-                readonly nullable: true;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
-              };
-            };
-          };
-        };
       };
     };
   };
@@ -1464,24 +1432,6 @@ type ContractBase = Omit<
     };
   };
   readonly meta: {};
-  readonly valueObjects: {
-    readonly Address: {
-      readonly fields: {
-        readonly city: {
-          readonly nullable: false;
-          readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
-        };
-        readonly street: {
-          readonly nullable: false;
-          readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
-        };
-        readonly zip: {
-          readonly nullable: true;
-          readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
-        };
-      };
-    };
-  };
   readonly profileHash: ProfileHash;
 };
 

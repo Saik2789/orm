@@ -13,6 +13,7 @@ import {
   postgresTarget,
   testEnumEntityContributions,
   testEnumPslBlockDescriptor,
+  valueObjectsOf,
 } from './fixtures';
 
 const numeric = {
@@ -25,7 +26,7 @@ const varCharishTypes = {
   ...postgresScalarAuthoringTypes,
   VarCharish: {
     kind: 'typeConstructor',
-    args: [{ kind: 'number', name: 'length', integer: true, minimum: 1 }],
+    args: [{ kind: 'value', dataType: 'pg/int4', name: 'length' }],
     output: {
       codecId: 'sql/varchar@1',
       typeParams: { length: { kind: 'arg', index: 0 } },
@@ -142,7 +143,7 @@ model Product {
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value.domain.namespaces['public']?.valueObjects?.['Price']?.fields).toEqual({
+    expect(valueObjectsOf(result.value)?.['Price']?.fields).toEqual({
       one: { nullable: false, type: numeric, many: false },
       many: { nullable: false, type: numeric, many: { elementNullable: false } },
     });

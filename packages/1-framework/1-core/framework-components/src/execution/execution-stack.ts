@@ -1,4 +1,5 @@
 import type { SessionSettings } from '../shared/framework-components';
+import { assertOneFrameworkCopy } from '../shared/framework-copies';
 import type {
   RuntimeAdapterDescriptor,
   RuntimeDriverDescriptor,
@@ -30,7 +31,7 @@ export interface ExecutionStack<
 > {
   readonly target: RuntimeTargetDescriptor<TFamilyId, TTargetId>;
   readonly adapter: RuntimeAdapterDescriptor<TFamilyId, TTargetId, TAdapterInstance>;
-  readonly driver:
+  readonly driver?:
     | RuntimeDriverDescriptor<TFamilyId, TTargetId, unknown, TDriverInstance>
     | undefined;
   readonly extensions: readonly RuntimeExtensionDescriptor<
@@ -103,6 +104,7 @@ export function createExecutionStack<
   readonly driver: TDriverDescriptor | undefined;
   readonly extensions: readonly TExtensionDescriptor[];
 } {
+  assertOneFrameworkCopy();
   return {
     target: input.target,
     adapter: input.adapter,

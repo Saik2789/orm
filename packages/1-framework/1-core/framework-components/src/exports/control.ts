@@ -71,6 +71,7 @@ export type {
   MigrationScaffoldContext,
   OpFactoryCall,
   PlanOrigin,
+  RowsFailingCheck,
   RowsHoldingValue,
   RowsWithoutValue,
   SchemaEntityCoordinate,
@@ -228,4 +229,4 @@ export {
   resolveTemplateTagEscapes,
   TAGGED_LITERAL_MAX_BYTES,
 } from '../shared/tagged-literal';
-export { timestampNowControlDescriptor } from '../shared/temporal-presets';
+export { timestampNowControlDescriptor } from '../shared/temporal-type-aliases';

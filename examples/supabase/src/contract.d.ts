@@ -280,14 +280,16 @@ export type FieldOutputTypes = FieldTypesFromDomain<
   CodecTypes,
   ParameterizedOutputTypeFunctions,
   FieldTypeOverrides,
-  'output'
+  'output',
+  ContractBase['storage']['namespaces']
 >;
 export type FieldInputTypes = FieldTypesFromDomain<
   ContractBase['domain']['namespaces'],
   CodecTypes,
   ParameterizedOutputTypeFunctions,
   FieldTypeOverrides,
-  'input'
+  'input',
+  ContractBase['storage']['namespaces']
 >;
 type ColumnTypeOverrides = {};
 export type StorageColumnTypes = ColumnTypesFromStorage<
@@ -461,11 +463,10 @@ type ContractBase = Omit<
       readonly id: 'supabase';
       readonly kind: 'extension';
       readonly targetId: 'postgres';
-      readonly version: '8.0.0-rc.20';
+      readonly version: '8.0.0-rc.21';
     };
   };
   readonly meta: {};
-
   readonly profileHash: ProfileHash;
 };
 

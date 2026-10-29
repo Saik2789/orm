@@ -1,7 +1,7 @@
 import {
   crossRef,
   domainModelsAtDefaultNamespace,
-  domainValueObjectsAtDefaultNamespace,
+  valueObjectsWithCoordinates,
 } from '@internal/contract/types';
 import { UNBOUND_NAMESPACE_ID } from '@internal/framework-components/ir';
 import { describe, expect, it } from 'vitest';
@@ -368,7 +368,18 @@ describe('mongo contract builder', () => {
         }),
       },
     });
-    expect(domainValueObjectsAtDefaultNamespace(contract.domain)).toEqual({
+    expect(
+      JSON.parse(
+        JSON.stringify(
+          Object.fromEntries(
+            valueObjectsWithCoordinates(contract.storage).map(({ coordinate, valueObject }) => [
+              coordinate.entityName,
+              valueObject,
+            ]),
+          ),
+        ),
+      ),
+    ).toEqual({
       Address: {
         fields: {
           street: {
@@ -726,6 +737,33 @@ describe('mongo contract builder', () => {
 
     expect(run).toThrow(/collide with the reserved built-in helper key/);
     expect(run).toThrow(expect.objectContaining({ code: 'CONTRACT.PACK_CONTRIBUTION_INVALID' }));
+  });
+
+  it('rejects a pack that registers one path as both an entity and a type alias', () => {
+    const familyPackWithAmbiguousPath = {
+      ...mongoFamilyPack,
+      authoring: {
+        type: {
+          custom: { Thing: { kind: 'typeAlias', output: { type: { codecId: 'mongo/string@1' } } } },
+        },
+        entityTypes: {
+          custom: {
+            Thing: { kind: 'entity', discriminator: 'thing', output: { factory: () => ({}) } },
+          },
+        },
+      },
+    } as unknown as typeof mongoFamilyPack;
+
+    expect(() =>
+      defineContract({ family: familyPackWithAmbiguousPath, target: mongoTargetPack }, () => ({
+        models: {},
+      })),
+    ).toThrow(
+      expect.objectContaining({
+        code: 'CONTRACT.PACK_CONTRIBUTION_INVALID',
+        message: expect.stringContaining('Ambiguous authoring registry path "custom.Thing"'),
+      }),
+    );
   });
 
   it('throws once and names the missing field when a multi-key index mixes valid and invalid fields', () => {
