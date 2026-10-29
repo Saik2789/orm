@@ -9,13 +9,9 @@
  * use for it: the contract's, or the one the planner derives.
  */
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import postgresAdapter from '@internal/adapter-postgres/control';
 import type { Contract } from '@internal/contract/types';
 import postgresDriver from '@internal/driver-postgres/control';
-import paradedb from '@internal/extension-paradedb/control';
-import pgvector from '@internal/extension-pgvector/control';
-import postgis from '@internal/extension-postgis/control';
 import sql from '@internal/family-sql/control';
 import { createControlStack } from '@internal/framework-components/control';
 import type { SqlStorage } from '@internal/sql-contract/types';
@@ -24,14 +20,12 @@ import postgres from '@internal/target-postgres/control';
 import { prisma7PostgresBinding } from '@internal/target-postgres/prisma7-binding';
 import { PostgresContractSerializer } from '@internal/target-postgres/runtime';
 import { withClient } from '@repo/test-utils';
-import { dirname, join } from 'pathe';
+import { join } from 'pathe';
 import { describe, expect, it } from 'vitest';
 import { runSchemaVerify, timeouts, useDevDatabase } from '../family.schema-verify.helpers';
+import { fixtureExtensionPacks, prisma7FixturesDir } from './fixture-extension-packs';
 
-const fixturesDir = join(
-  dirname(fileURLToPath(import.meta.url)),
-  '../../../../packages/2-sql-family/2-authoring/contract-prisma7/test/fixtures',
-);
+const fixturesDir = prisma7FixturesDir;
 
 const successFixtures = readdirSync(fixturesDir, { withFileTypes: true })
   .filter((entry) => entry.isDirectory())
@@ -118,20 +112,6 @@ function schemaPathOf(fixture: string): string {
   return existsSync(directory) ? directory : join(fixturesDir, fixture, 'schema.prisma');
 }
 
-const extensionPacks = new Map([pgvector, postgis, paradedb].map((pack) => [pack.id, pack]));
-
-/** The extension packs the fixture's `composed-extensions.json` lists, which the stack composes. */
-function composedExtensionsOf(fixture: string) {
-  const path = join(fixturesDir, fixture, 'composed-extensions.json');
-  const packIds: readonly string[] = existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')) : [];
-  return packIds.map((packId) => {
-    const pack = extensionPacks.get(packId);
-    if (pack === undefined)
-      throw new Error(`Fixture "${fixture}" composes unknown pack "${packId}"`);
-    return pack;
-  });
-}
-
 async function interpret(fixture: string): Promise<Contract<SqlStorage>> {
   const schemaPath = schemaPathOf(fixture);
   const stack = createControlStack({
@@ -139,7 +119,7 @@ async function interpret(fixture: string): Promise<Contract<SqlStorage>> {
     target: postgres,
     adapter: postgresAdapter,
     driver: postgresDriver,
-    extensions: composedExtensionsOf(fixture),
+    extensions: fixtureExtensionPacks(fixture),
   });
   const loaded = await prisma7Contract(schemaPath, { binding: prisma7PostgresBinding }).source.load(
     {
