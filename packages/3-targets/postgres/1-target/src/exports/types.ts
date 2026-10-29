@@ -1,4 +1,5 @@
 export { postgresRenderCheckExpressions } from '../core/check-expressions';
+export { PostgresExtension, type PostgresExtensionInput } from '../core/postgres-extension';
 export { PostgresNativeEnum, type PostgresNativeEnumInput } from '../core/postgres-native-enum';
 export {
   PostgresRlsEnablement,

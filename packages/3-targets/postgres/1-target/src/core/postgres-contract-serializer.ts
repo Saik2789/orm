@@ -25,6 +25,7 @@ import { PG_INT_CODEC_ID, PG_TEXT_CODEC_ID } from './codec-ids';
 import { createPostgresBuiltinCodecLookup } from './codec-registry';
 import { createPostgresBuiltinDataTypeLookup, postgresTextDataTypes } from './data-types';
 import {
+  extensionEntityKind,
   nativeEnumEntityKind,
   policyEntityKind,
   rlsEnablementEntityKind,
@@ -130,6 +131,7 @@ export class PostgresContractSerializer extends SqlContractSerializerBase<Contra
       roleEntityKind,
       rlsEnablementEntityKind,
       nativeEnumEntityKind,
+      extensionEntityKind,
       ...extraPackEntityKinds,
     ];
     super(storageTypesHydrators, entityKinds);
