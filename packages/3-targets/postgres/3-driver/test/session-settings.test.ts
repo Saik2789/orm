@@ -166,6 +166,16 @@ describe('the connection settings of a connection Prisma opens', () => {
     expect(config.port).toBe('5432');
     expect(config.database).toBe('app');
     expect(config.host).toBe('/var/run/postgresql');
+
+    const withUser = pgConnectionConfig(
+      { connectionString: 'postgresql://user:pass@:5432/app?host=/var/run/postgresql' },
+      SETTINGS,
+    );
+    expect(withUser.user).toBe('user');
+    expect(withUser.password).toBe('pass');
+    expect(withUser.port).toBe('5432');
+    expect(withUser.database).toBe('app');
+    expect(withUser.host).toBe('/var/run/postgresql');
   });
 
   it('add no startup options when the target declares no settings', () => {

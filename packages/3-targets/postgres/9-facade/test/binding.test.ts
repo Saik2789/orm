@@ -117,6 +117,9 @@ describe('validatePostgresUrl', () => {
     expect(validatePostgresUrl('postgresql://user@:5432/mydb')).toBe(
       'postgresql://user@:5432/mydb',
     );
+    expect(validatePostgresUrl('postgresql://:5432/mydb?host=/var/run/postgresql')).toBe(
+      'postgresql://:5432/mydb?host=/var/run/postgresql',
+    );
   });
 
   it('rejects multi-host connection string', () => {
