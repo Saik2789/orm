@@ -44,7 +44,7 @@ function normalizePostgresUrlForParsing(url: string): string {
       const atIndex = authority.lastIndexOf('@');
       const userinfo = atIndex !== -1 ? authority.slice(0, atIndex + 1) : '';
       let hostpart = atIndex !== -1 ? authority.slice(atIndex + 1) : authority;
-      if (hostpart === '' || hostpart.startsWith(':')) {
+      if (!hostpart.includes(',') && (hostpart === '' || hostpart.startsWith(':'))) {
         hostpart = `dummy-host${hostpart}`;
       }
       return `${scheme}${userinfo}${hostpart}`;
@@ -82,6 +82,11 @@ export function validatePostgresUrl(url: string): string {
   }
 
   if (!/^postgres(?:ql)?:\/\//i.test(trimmed)) {
+    throw postgresError('RUNTIME.BINDING_INVALID', 'Postgres URL must be a valid URL', {
+      meta: { extension: 'postgres', reason: 'unparseable url' },
+    });
+  }
+  if (parsed.host.includes(',') || parsed.hostname.includes(',')) {
     throw postgresError('RUNTIME.BINDING_INVALID', 'Postgres URL must be a valid URL', {
       meta: { extension: 'postgres', reason: 'unparseable url' },
     });

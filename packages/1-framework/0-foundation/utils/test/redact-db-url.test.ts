@@ -47,4 +47,9 @@ describe('redactDatabaseUrl', () => {
 
     expect(result).toEqual({});
   });
+
+  it('returns empty object for multi-host URLs', () => {
+    expect(redactDatabaseUrl('postgresql://h1:5432,h2:5432/app_db')).toEqual({});
+    expect(redactDatabaseUrl('postgresql://h1,h2/app_db')).toEqual({});
+  });
 });

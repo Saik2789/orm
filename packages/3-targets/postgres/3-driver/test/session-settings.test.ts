@@ -146,6 +146,16 @@ describe('the connection settings of a connection Prisma opens', () => {
     expect(config.port).toBe('5432');
     expect(config.database).toBe('app');
     expect(config.host).toBeUndefined();
+
+    const withUser = pgConnectionConfig(
+      { connectionString: 'postgresql://user:pass@:5432/app' },
+      SETTINGS,
+    );
+    expect(withUser.user).toBe('user');
+    expect(withUser.password).toBe('pass');
+    expect(withUser.port).toBe('5432');
+    expect(withUser.database).toBe('app');
+    expect(withUser.host).toBeUndefined();
   });
 
   it('parses URLs with blank host and explicit port retaining socket host from query string', () => {

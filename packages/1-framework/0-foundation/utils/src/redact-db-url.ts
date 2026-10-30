@@ -19,7 +19,11 @@ export interface RedactedDatabaseUrl {
  */
 function parseUrlForMetadata(url: string): { parsed: URL; dummyHost: boolean } | undefined {
   try {
-    return { parsed: new URL(url), dummyHost: false };
+    const parsed = new URL(url);
+    if (parsed.host.includes(',') || parsed.hostname.includes(',')) {
+      return undefined;
+    }
+    return { parsed, dummyHost: false };
   } catch {
     let dummyHost = false;
     const normalized = url.replace(
@@ -28,10 +32,7 @@ function parseUrlForMetadata(url: string): { parsed: URL; dummyHost: boolean } |
         const atIndex = authority.lastIndexOf('@');
         const userinfo = atIndex !== -1 ? authority.slice(0, atIndex + 1) : '';
         let hostpart = atIndex !== -1 ? authority.slice(atIndex + 1) : authority;
-        if (hostpart.includes(',')) {
-          hostpart = hostpart.split(',')[0] ?? '';
-        }
-        if (hostpart === '' || hostpart.startsWith(':')) {
+        if (!hostpart.includes(',') && (hostpart === '' || hostpart.startsWith(':'))) {
           dummyHost = true;
           hostpart = `dummy-host${hostpart}`;
         }
@@ -39,7 +40,11 @@ function parseUrlForMetadata(url: string): { parsed: URL; dummyHost: boolean } |
       },
     );
     try {
-      return { parsed: new URL(normalized), dummyHost };
+      const parsed = new URL(normalized);
+      if (parsed.host.includes(',') || parsed.hostname.includes(',')) {
+        return undefined;
+      }
+      return { parsed, dummyHost };
     } catch {
       return undefined;
     }

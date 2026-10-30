@@ -114,10 +114,22 @@ describe('validatePostgresUrl', () => {
 
   it('accepts connection string with blank user and host but explicit port', () => {
     expect(validatePostgresUrl('postgresql://:5432/mydb')).toBe('postgresql://:5432/mydb');
+    expect(validatePostgresUrl('postgresql://user@:5432/mydb')).toBe(
+      'postgresql://user@:5432/mydb',
+    );
   });
 
   it('rejects multi-host connection string', () => {
     expect(() => validatePostgresUrl('postgresql://h1:5432,h2:5432/mydb')).toThrow(
+      'Postgres URL must be a valid URL',
+    );
+    expect(() => validatePostgresUrl('postgresql://h1,h2/mydb')).toThrow(
+      'Postgres URL must be a valid URL',
+    );
+    expect(() => validatePostgresUrl('postgresql://h1,h2:5432/mydb')).toThrow(
+      'Postgres URL must be a valid URL',
+    );
+    expect(() => validatePostgresUrl('postgresql://user:pass@h1,h2/mydb')).toThrow(
       'Postgres URL must be a valid URL',
     );
   });
