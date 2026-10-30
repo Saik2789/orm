@@ -52,4 +52,16 @@ describe('redactDatabaseUrl', () => {
     expect(redactDatabaseUrl('postgresql://h1:5432,h2:5432/app_db')).toEqual({});
     expect(redactDatabaseUrl('postgresql://h1,h2/app_db')).toEqual({});
   });
+
+  it('extracts metadata for MongoDB multi-host URLs', () => {
+    expect(redactDatabaseUrl('mongodb://h1,h2/app_db')).toEqual({
+      host: 'h1,h2',
+      database: 'app_db',
+    });
+    expect(redactDatabaseUrl('mongodb://user:pass@h1,h2/app_db')).toEqual({
+      host: 'h1,h2',
+      database: 'app_db',
+      username: 'user',
+    });
+  });
 });

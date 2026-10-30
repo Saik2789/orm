@@ -17,10 +17,18 @@ export interface RedactedDatabaseUrl {
  * Parsing errors are ignored and result in an empty object so callers never
  * leak raw URLs when the input is malformed.
  */
+function hasRejectedMultiHost(parsed: URL): boolean {
+  return (
+    (parsed.host.includes(',') || parsed.hostname.includes(',')) &&
+    // biome-ignore lint/plugin/no-family-vocabulary: protocol check for database URL metadata extraction
+    parsed.protocol !== 'mongodb:'
+  );
+}
+
 function parseUrlForMetadata(url: string): { parsed: URL; dummyHost: boolean } | undefined {
   try {
     const parsed = new URL(url);
-    if (parsed.host.includes(',') || parsed.hostname.includes(',')) {
+    if (hasRejectedMultiHost(parsed)) {
       return undefined;
     }
     return { parsed, dummyHost: false };
@@ -41,7 +49,7 @@ function parseUrlForMetadata(url: string): { parsed: URL; dummyHost: boolean } |
     );
     try {
       const parsed = new URL(normalized);
-      if (parsed.host.includes(',') || parsed.hostname.includes(',')) {
+      if (hasRejectedMultiHost(parsed)) {
         return undefined;
       }
       return { parsed, dummyHost };
